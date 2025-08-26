@@ -4,6 +4,9 @@
 text_model: "meta-llama/Llama-3.1-8B-Instruct"
 audio_model: "openai/whisper-large-v3-turbo"
 
+audio_model_lora_config:
+  r: 8
+
 train_sets:
   - name: librispeech-clean-continuation
   - name: librispeech-other-continuation
