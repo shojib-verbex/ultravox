@@ -1,0 +1,30 @@
+# closest trining data setup to v0.4, used for quick experiments and comparisons
+# note: the audio_model is upgraded to whisper-large-v3-turbo instead of openai/whisper-medium
+
+text_model: "meta-llama/Llama-3.1-8B-Instruct"
+audio_model: "openai/whisper-large-v3-turbo"
+
+train_sets:
+  - name: librispeech-clean-continuation
+  - name: librispeech-other-continuation
+  - name: commonvoice-en-continuation
+  - name: librispeech-clean-transcription
+  - name: librispeech-other-transcription
+  - name: commonvoice-en-transcription
+
+lr: 1e-3
+lr_warmup_steps: 1000
+batch_size: 24
+grad_accum_steps: 0
+
+max_steps: 100000
+val_steps: 0.05
+save_steps: 0.25
+logging_steps: 1
+
+projector_ln_mid: false
+
+report_logs_to: []
+
+# the original v0.4 model is equivalent to projector_ln_mid: false
+# use the default value here for projector_ln_mid: true

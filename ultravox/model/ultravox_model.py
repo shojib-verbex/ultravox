@@ -349,6 +349,7 @@ class UltravoxModel(transformers.LlamaPreTrainedModel, GenerationMixin):
                 raise ValueError(
                     f"Unsupported loss function: {self.loss_config.loss_function}"
                 )
+        logging.info(f"lm_output.loss: {lm_output.loss}")
         return lm_output
 
     def _prepare_audio_embeds(

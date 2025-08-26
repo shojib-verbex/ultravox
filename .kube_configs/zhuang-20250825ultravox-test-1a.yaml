@@ -1,0 +1,74 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: zhuang-20250825ultravox-test-1a
+spec:
+  ttlSecondsAfterFinished: 864000
+  backoffLimit: 0
+  template:
+    spec:
+      containers:
+      - name: trainer
+        image: us-central1-docker.pkg.dev/fixie-frame/ultravox-training/ultravox-training:v2
+        env:
+        - name: EXP_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: LOCAL_WORLD_SIZE
+          value: '8'
+        - name: NUM_NODES
+          value: '1'
+        - name: BRANCH_NAME
+          value: zhuang-20250825ultravox
+        - name: TRAIN_ARGS
+          value: --config_path ultravox/training/configs/expt_config.yaml
+        - name: HF_HUB_DOWNLOAD_TIMEOUT
+          value: '6000'
+        - name: HF_HUB_ENABLE_HF_TRANSFER
+          value: '1'
+        - name: FSDP_CPU_RAM_EFFICIENT_LOADING
+          value: '1'
+        command:
+        - /bin/bash
+        - -c
+        args:
+        - |
+          set -e &&
+          git clone -b $BRANCH_NAME https://github.com/fixie-ai/ultravox.git &&
+          cd ultravox &&
+          apt-get update && apt-get install -y git-lfs &&
+          git lfs pull &&
+          source $VENV_PATH/bin/activate &&
+          $POETRY_HOME/bin/poetry install --only main &&
+          python -m ultravox.training.helpers.prefetch_weights $TRAIN_ARGS &&
+          torchrun \
+            --nnodes=${NUM_NODES:-1} \
+            --nproc_per_node=${LOCAL_WORLD_SIZE:-1} \
+            --node_rank=${NODE_RANK:-0} \
+            --master_addr=${MASTER_ADDR:-localhost} \
+            --master_port=${MASTER_PORT:-29500} \
+            -m ultravox.training.train $TRAIN_ARGS --exp_name $EXP_NAME
+        ports:
+        - containerPort: 29500
+        volumeMounts:
+        - name: dshm
+          mountPath: /dev/shm
+        resources:
+          requests:
+            nvidia.com/gpu: 8
+            memory: 900Gi
+            cpu: '32'
+            ephemeral-storage: 300Gi
+          limits:
+            nvidia.com/gpu: 8
+            memory: 900Gi
+            cpu: '100'
+            ephemeral-storage: 1Ti
+        imagePullPolicy: Always
+      restartPolicy: Never
+      volumes:
+      - name: dshm
+        emptyDir:
+          medium: Memory
+          sizeLimit: 8Gi
