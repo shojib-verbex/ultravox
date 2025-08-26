@@ -15,7 +15,6 @@ train_sets:
 lr: 1e-3
 lr_warmup_steps: 1000
 batch_size: 24
-grad_accum_steps: 0
 
 max_steps: 100000
 val_steps: 0.05
