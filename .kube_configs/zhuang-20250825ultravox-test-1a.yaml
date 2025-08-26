@@ -29,6 +29,9 @@ spec:
           value: '1'
         - name: FSDP_CPU_RAM_EFFICIENT_LOADING
           value: '1'
+        envFrom:
+        - secretRef:
+            name: zhuang-keys
         command:
         - /bin/bash
         - -c
