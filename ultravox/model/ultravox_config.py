@@ -143,7 +143,9 @@ class UltravoxConfig(transformers.PretrainedConfig):
         self.projector_act = projector_act
         self.projector_ln_mid = projector_ln_mid
         if text_model_id is not None:
-            text_config = transformers.AutoConfig.from_pretrained(text_model_id)
+            text_config = transformers.AutoConfig.from_pretrained(
+                text_model_id
+            ).get_text_config()
         else:
             text_config = text_config or {}
             if isinstance(text_config, dict):
