@@ -1,6 +1,6 @@
 model: "fixie-ai/ultravox-v0_6-llama-3_1-8b"
 
-report_logs_to: []
+report_logs_to: ["wandb"]
 output_dir: "./output"
 
 eval_sets:
@@ -12,6 +12,6 @@ eval_sets:
   - name: heysquad-machine-em
 
 eval_dataset_args:
-  max_samples: 2000
+  max_samples: 5000
 
 eval_batch_size: 4

@@ -16,6 +16,7 @@ from ultravox.data.configs import heysquad
 from ultravox.data.configs import indicvoices
 from ultravox.data.configs import kathbath
 from ultravox.data.configs import librispeech
+from ultravox.data.configs import mmau
 from ultravox.data.configs import multilingual_librispeech
 from ultravox.data.configs import musan
 from ultravox.data.configs import peoplespeech
@@ -112,4 +113,5 @@ register_datasets(seamlessalign.configs)
 register_datasets(shrutilipi.configs)
 register_datasets(kathbath.configs)
 register_datasets(indicvoices.configs)
+register_datasets(mmau.configs)
 register_datasets(voicebench.configs)

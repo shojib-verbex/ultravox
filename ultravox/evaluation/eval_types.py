@@ -14,6 +14,9 @@ class Sample(dataclasses_json.DataClassJsonMixin):
     history: List[Dict[str, str]] = dataclasses.field(default_factory=list)
     thinking_content: Optional[str] = None
     extra_kwargs: Optional[Dict[str, Any]] = None  # for datasets like Voicebench
+    # Per-sample evaluation score (populated after evaluation)
+    score: Optional[float] = None
+    score_reason: Optional[str] = None  # For metrics that provide explanations
 
 
 @dataclasses.dataclass

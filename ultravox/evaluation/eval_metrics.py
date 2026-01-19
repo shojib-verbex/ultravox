@@ -47,17 +47,65 @@ def evaluate_answer(sample: eval_types.Sample, metric: str) -> eval_types.Result
         raise ValueError(f"Unknown metric: {metric}")
 
 
+def _compute_per_sample_scores(
+    samples: List[eval_types.Sample], metric: str, args: Dict[str, Any]
+) -> None:
+    """Compute and store per-sample scores for corpus-level metrics.
+
+    This populates the `score` field of each Sample object based on the metric type.
+    For WER/BLEU, lower/higher is better respectively. All scores are stored as-is
+    without normalization to preserve interpretability.
+    """
+    if metric == "wer":
+        for sample in samples:
+            sample.score = string_metrics.wer_single(
+                sample.expected_answer, sample.generated_answer, args
+            )
+    elif metric == "bleu":
+        for sample in samples:
+            sample.score = string_metrics.bleu_single(
+                sample.generated_answer, sample.expected_answer, args
+            )
+    elif metric == "squad_f1":
+        for sample in samples:
+            sample.score = string_metrics.squad_f1_single(
+                sample.generated_answer, sample.expected_answer
+            )
+    elif metric == "squad_exact_match":
+        for sample in samples:
+            sample.score = string_metrics.squad_exact_match_single(
+                sample.generated_answer, sample.expected_answer
+            )
+
+
 def evaluate_answers(
     samples: List[eval_types.Sample], metric_config: types.EvalConfig
 ) -> eval_types.Result:
+    """Evaluate all samples and populate per-sample scores.
+
+    This function computes evaluation metrics for all samples and stores
+    the per-sample score in each Sample's `score` field. For per-sample
+    metrics (METRIC_REGISTRY), it also stores the reason if available.
+    """
     if metric_config.metric in CORPUS_METRIC_REGISTRY:
+        # Compute per-sample scores first
+        _compute_per_sample_scores(samples, metric_config.metric, metric_config.args)
+
+        # Then compute the corpus-level metric
         metric_func = CORPUS_METRIC_REGISTRY[metric_config.metric]
         return metric_func(samples, metric_config.args)
+
     elif metric_config.metric in METRIC_REGISTRY:
         metric_fn = METRIC_REGISTRY[metric_config.metric]
         partial_metric_fn = partial(metric_fn, **metric_config.args)
         with ThreadPoolExecutor() as executor:
             results = list(executor.map(partial_metric_fn, samples))
+
+        # Store per-sample scores and reasons
+        for sample, result in zip(samples, results):
+            sample.score = result.score
+            if hasattr(result, "reason"):
+                sample.score_reason = result.reason
 
         total_score = sum(result.score for result in results)
         return eval_types.MeanResult(score=total_score / len(samples))
