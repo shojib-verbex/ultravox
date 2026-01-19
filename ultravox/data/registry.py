@@ -12,6 +12,7 @@ from ultravox.data.configs import commonvoice
 from ultravox.data.configs import covost2
 from ultravox.data.configs import fleurs
 from ultravox.data.configs import gigaspeech
+from ultravox.data.configs import heysquad
 from ultravox.data.configs import indicvoices
 from ultravox.data.configs import kathbath
 from ultravox.data.configs import librispeech
@@ -96,6 +97,7 @@ register_datasets(boolq.configs)
 register_datasets(commonvoice.configs)
 register_datasets(covost2.configs)
 register_datasets(gigaspeech.configs)
+register_datasets(heysquad.configs)
 register_datasets(librispeech.configs)
 register_datasets(multilingual_librispeech.configs)
 register_datasets(peoplespeech.configs)

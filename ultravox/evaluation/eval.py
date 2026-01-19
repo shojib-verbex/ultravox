@@ -355,7 +355,16 @@ def main(override_sys_args: Optional[List[str]] = None):
             wandb.run.finish()
 
     if device_helpers.is_distributed():
+        # Ensure all processes are synchronized before cleanup
+        dist.barrier()
+        torch.cuda.synchronize()
         dist.destroy_process_group()
+
+    # Force cleanup to avoid PyGILState errors during Python finalization
+    import gc
+
+    gc.collect()
+    torch.cuda.empty_cache()
 
 
 if __name__ == "__main__":

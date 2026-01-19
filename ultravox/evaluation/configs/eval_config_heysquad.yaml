@@ -1,0 +1,17 @@
+model: "fixie-ai/ultravox-v0_6-llama-3_1-8b"
+
+report_logs_to: []
+output_dir: "./output"
+
+eval_sets:
+  # F1 Score metrics
+  - name: heysquad-human
+  - name: heysquad-machine
+  # Exact Match metrics
+  - name: heysquad-human-em
+  - name: heysquad-machine-em
+
+eval_dataset_args:
+  max_samples: 2000
+
+eval_batch_size: 4

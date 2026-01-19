@@ -35,6 +35,8 @@ CORPUS_METRIC_REGISTRY: Dict[
 ] = {
     "bleu": string_metrics.bleu,
     "wer": string_metrics.wer,
+    "squad_f1": string_metrics.squad_f1,
+    "squad_exact_match": string_metrics.squad_exact_match,
 }
 
 

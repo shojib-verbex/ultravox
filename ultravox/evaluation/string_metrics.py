@@ -1,6 +1,8 @@
 import argparse
 import json
 import re
+import string
+from collections import Counter
 from typing import Any, Dict, List
 
 import evaluate
@@ -122,6 +124,79 @@ def bleu(
         hypotheses=hypotheses, references=references, **args
     ).score
     return eval_types.BleuResult(score=score)
+
+
+def _normalize_squad_answer(s: str) -> str:
+    """Lower text and remove punctuation, articles and extra whitespace.
+
+    This is the standard normalization used in SQuAD evaluation.
+    """
+
+    def remove_articles(text: str) -> str:
+        return re.sub(r"\b(a|an|the)\b", " ", text)
+
+    def white_space_fix(text: str) -> str:
+        return " ".join(text.split())
+
+    def remove_punc(text: str) -> str:
+        exclude = set(string.punctuation)
+        return "".join(ch for ch in text if ch not in exclude)
+
+    return white_space_fix(remove_articles(remove_punc(s.lower())))
+
+
+def squad_exact_match(
+    samples: List[eval_types.Sample], args: Dict[str, Any]
+) -> eval_types.MeanResult:
+    """
+    Compute SQuAD-style exact match score for extractive question answering.
+
+    Exact match measures whether the prediction exactly matches the ground truth
+    after normalization (lowercasing, removing punctuation/articles/whitespace).
+    """
+    scores = [
+        float(
+            _normalize_squad_answer(sample.generated_answer)
+            == _normalize_squad_answer(sample.expected_answer)
+        )
+        for sample in samples
+    ]
+    return eval_types.MeanResult(score=sum(scores) / len(scores) * 100)
+
+
+def squad_f1(
+    samples: List[eval_types.Sample], args: Dict[str, Any]
+) -> eval_types.MeanResult:
+    """
+    Compute SQuAD-style F1 score for extractive question answering.
+
+    F1 score measures token-level overlap between prediction and ground truth,
+    accounting for both precision and recall. This is the standard metric for
+    SQuAD and similar extractive QA datasets.
+    """
+
+    def compute_f1(prediction: str, ground_truth: str) -> float:
+        pred_tokens = _normalize_squad_answer(prediction).split()
+        gt_tokens = _normalize_squad_answer(ground_truth).split()
+
+        if len(pred_tokens) == 0 or len(gt_tokens) == 0:
+            return float(pred_tokens == gt_tokens)
+
+        common = Counter(pred_tokens) & Counter(gt_tokens)
+        num_same = sum(common.values())
+
+        if num_same == 0:
+            return 0.0
+
+        precision = num_same / len(pred_tokens)
+        recall = num_same / len(gt_tokens)
+        return (2 * precision * recall) / (precision + recall)
+
+    scores = [
+        compute_f1(sample.generated_answer, sample.expected_answer)
+        for sample in samples
+    ]
+    return eval_types.MeanResult(score=sum(scores) / len(scores) * 100)
 
 
 def main():
