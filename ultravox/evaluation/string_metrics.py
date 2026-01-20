@@ -1,6 +1,8 @@
 import argparse
 import json
 import re
+import string
+from collections import Counter
 from typing import Any, Dict, List
 
 import evaluate
@@ -16,6 +18,59 @@ arabic_diacritics = re.compile(r"[\u064B-\u065F\u0670]")
 
 def remove_diacritics(text):
     return arabic_diacritics.sub("", text)
+
+
+def _get_wer_normalizer(lang_id: str):
+    """Get the appropriate text normalizer for a language."""
+    if lang_id == "en":
+        return whisper_english.EnglishTextNormalizer()
+    else:
+        return whisper_basic.BasicTextNormalizer()
+
+
+def _normalize_for_wer(
+    reference: str, hypothesis: str, lang_id: str, cap_hypothesis_len: float = None
+) -> tuple:
+    """Normalize reference and hypothesis for WER computation."""
+    normalizer = _get_wer_normalizer(lang_id)
+
+    if lang_id == "ar":
+        reference = remove_diacritics(reference)
+        hypothesis = remove_diacritics(hypothesis)
+
+    reference = normalizer(reference)
+    hypothesis = normalizer(hypothesis)
+
+    # Languages where we compute CER (space-separated characters)
+    if lang_id in ["zh", "ja", "th", "lo", "my"]:
+        reference = " ".join(list(reference))
+        hypothesis = " ".join(list(hypothesis))
+
+    # Cap the length of the hypothesis
+    if cap_hypothesis_len is not None:
+        hypothesis = hypothesis[: int(len(reference) * cap_hypothesis_len)]
+
+    # Handle empty strings
+    reference = reference if reference.strip() else "<silence>"
+    hypothesis = hypothesis if hypothesis.strip() else "<silence>"
+
+    return reference, hypothesis
+
+
+def wer_single(
+    reference: str, hypothesis: str, args: Dict[str, Any]
+) -> float:
+    """Compute WER for a single sample."""
+    lang_id = args.get("lang_id", "<undefined>").lower()
+    cap_hypothesis_len = args.get("cap_hypothesis_len", None)
+
+    ref_norm, hyp_norm = _normalize_for_wer(
+        reference, hypothesis, lang_id, cap_hypothesis_len
+    )
+
+    wer_metric = evaluate.load("wer")
+    wer_score = wer_metric.compute(predictions=[hyp_norm], references=[ref_norm])
+    return wer_score * 100
 
 
 def wer(samples: List[eval_types.Sample], args: Dict[str, Any]) -> eval_types.WerResult:
@@ -122,6 +177,98 @@ def bleu(
         hypotheses=hypotheses, references=references, **args
     ).score
     return eval_types.BleuResult(score=score)
+
+
+def bleu_single(hypothesis: str, reference: str, args: Dict[str, Any]) -> float:
+    """Compute sentence-level BLEU score for a single sample."""
+    score = sacrebleu.sentence_bleu(hypothesis, [reference], **args).score
+    return score
+
+
+def _normalize_squad_answer(s: str) -> str:
+    """Lower text and remove punctuation, articles and extra whitespace.
+
+    This is the standard normalization used in SQuAD evaluation.
+    """
+
+    def remove_articles(text: str) -> str:
+        return re.sub(r"\b(a|an|the)\b", " ", text)
+
+    def white_space_fix(text: str) -> str:
+        return " ".join(text.split())
+
+    def remove_punc(text: str) -> str:
+        exclude = set(string.punctuation)
+        return "".join(ch for ch in text if ch not in exclude)
+
+    return white_space_fix(remove_articles(remove_punc(s.lower())))
+
+
+def squad_exact_match_single(prediction: str, ground_truth: str) -> float:
+    """Compute SQuAD-style exact match for a single sample.
+
+    Returns 100.0 if exact match, 0.0 otherwise.
+    """
+    return (
+        100.0
+        if _normalize_squad_answer(prediction) == _normalize_squad_answer(ground_truth)
+        else 0.0
+    )
+
+
+def squad_f1_single(prediction: str, ground_truth: str) -> float:
+    """Compute SQuAD-style F1 for a single sample.
+
+    Returns score in range [0, 100].
+    """
+    pred_tokens = _normalize_squad_answer(prediction).split()
+    gt_tokens = _normalize_squad_answer(ground_truth).split()
+
+    if len(pred_tokens) == 0 or len(gt_tokens) == 0:
+        return 100.0 if pred_tokens == gt_tokens else 0.0
+
+    common = Counter(pred_tokens) & Counter(gt_tokens)
+    num_same = sum(common.values())
+
+    if num_same == 0:
+        return 0.0
+
+    precision = num_same / len(pred_tokens)
+    recall = num_same / len(gt_tokens)
+    return (2 * precision * recall) / (precision + recall) * 100
+
+
+def squad_exact_match(
+    samples: List[eval_types.Sample], args: Dict[str, Any]
+) -> eval_types.MeanResult:
+    """
+    Compute SQuAD-style exact match score for extractive question answering.
+
+    Exact match measures whether the prediction exactly matches the ground truth
+    after normalization (lowercasing, removing punctuation/articles/whitespace).
+    """
+    scores = [
+        squad_exact_match_single(sample.generated_answer, sample.expected_answer)
+        for sample in samples
+    ]
+    return eval_types.MeanResult(score=sum(scores) / len(scores))
+
+
+def squad_f1(
+    samples: List[eval_types.Sample], args: Dict[str, Any]
+) -> eval_types.MeanResult:
+    """
+    Compute SQuAD-style F1 score for extractive question answering.
+
+    F1 score measures token-level overlap between prediction and ground truth,
+    accounting for both precision and recall. This is the standard metric for
+    SQuAD and similar extractive QA datasets.
+    """
+    scores = [
+        squad_f1_single(sample.generated_answer, sample.expected_answer)
+        for sample in samples
+    ]
+    return eval_types.MeanResult(score=sum(scores) / len(scores))
 
 
 def main():
