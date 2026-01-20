@@ -253,6 +253,32 @@ class VoiceDataset(SizedIterableDataset):
         Returns None if the sample should be skipped.
         """
 
+    def _get_nested_field(self, row: Dict[str, Any], field_path: str) -> Any:
+        """Get a field value from row, supporting dot notation for nested access.
+
+        Examples:
+            _get_nested_field(row, "id") -> row["id"]
+            _get_nested_field(row, "other_attributes.task") -> row["other_attributes"]["task"]
+        """
+        value = row
+        for key in field_path.split("."):
+            if isinstance(value, dict):
+                value = value.get(key)
+            else:
+                return None
+        return value
+
+    def _check_row_filter(self, row: Dict[str, Any]) -> bool:
+        """Check if row passes the configured filter. Returns True if row should be included."""
+        if self._config.row_filter is None:
+            return True
+
+        for field_path, expected_value in self._config.row_filter.items():
+            value = self._get_nested_field(row, field_path)
+            if value != expected_value:
+                return False
+        return True
+
     def _get_audio(
         self, row: transformers.BatchFeature, column_name: Optional[str] = "audio"
     ) -> np.ndarray:
@@ -352,16 +378,20 @@ class GenericDataset(VoiceDataset):
         return f"GenericDataset({self._config})"
 
     def _get_sample(self, row) -> Optional[data_sample.VoiceSample]:
+        # Check row filter first - return None to skip filtered-out samples
+        if not self._check_row_filter(row):
+            return None
 
         # Setting up extra_kwargs for datasets like Voicebench
+        # Supports nested field access via dot notation (e.g., "other_attributes.task")
         extra_kwargs = None
         if (
             self._config.eval_config is not None
             and self._config.eval_config.extra_kwargs_map is not None
         ):
             extra_kwargs = {
-                key: row.get(value)
-                for key, value in self._config.eval_config.extra_kwargs_map.items()
+                key: self._get_nested_field(row, field_path)
+                for key, field_path in self._config.eval_config.extra_kwargs_map.items()
             }
 
         # If the messages_direct_column is provided, we use it directly to create the messages and transcript.

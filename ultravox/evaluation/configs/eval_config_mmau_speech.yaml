@@ -1,0 +1,13 @@
+model: "fixie-ai/ultravox-v0_6-llama-3_1-8b"
+
+report_logs_to: ["wandb"]
+output_dir: "./output"
+
+# Speech-only MMAU evaluation
+# Filters to only speech tasks (speaker ID, emotion, ASR-related)
+# More appropriate for voice/telephony assistant evaluation
+eval_sets:
+  - name: mmau-speech
+
+eval_dataset_args:
+  max_samples: 600  # More than actual count (~520) to ensure all samples included

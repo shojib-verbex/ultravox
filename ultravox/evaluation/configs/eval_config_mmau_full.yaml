@@ -1,0 +1,12 @@
+model: "fixie-ai/ultravox-v0_6-llama-3_1-8b"
+
+report_logs_to: ["wandb"]
+output_dir: "./output"
+
+# Full MMAU evaluation with task-type breakdown reporting
+# Reports overall score + separate scores for speech, sound, and music
+eval_sets:
+  - name: mmau
+
+eval_dataset_args:
+  max_samples: 1000  # Full dataset

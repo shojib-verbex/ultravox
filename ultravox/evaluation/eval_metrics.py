@@ -1,6 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable, Dict, List, Tuple
 
 from ultravox.data import types
 from ultravox.evaluation import eval_types
@@ -111,3 +111,35 @@ def evaluate_answers(
         return eval_types.MeanResult(score=total_score / len(samples))
     else:
         raise ValueError(f"Unknown metric: {metric_config.metric}")
+
+
+def aggregate_scores_by_field(
+    samples: List[eval_types.Sample], field_name: str
+) -> Dict[str, Tuple[float, int]]:
+    """Group samples by field in extra_kwargs and compute per-group scores.
+
+    Args:
+        samples: List of evaluated samples with scores populated
+        field_name: The field in extra_kwargs to group by (e.g., "task_type")
+
+    Returns:
+        Dict mapping group_key -> (mean_score, sample_count)
+        Example: {"speech": (0.56, 520), "sound": (0.42, 240), "music": (0.45, 240)}
+    """
+    groups: Dict[str, List[float]] = {}
+
+    for sample in samples:
+        if sample.extra_kwargs and field_name in sample.extra_kwargs:
+            group_key = sample.extra_kwargs[field_name]
+            if group_key not in groups:
+                groups[group_key] = []
+            if sample.score is not None:
+                groups[group_key].append(sample.score)
+
+    results = {}
+    for group_key, scores in groups.items():
+        if scores:
+            mean_score = sum(scores) / len(scores)
+            results[group_key] = (mean_score, len(scores))
+
+    return results

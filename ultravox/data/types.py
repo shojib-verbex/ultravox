@@ -145,7 +145,11 @@ class EvalConfig(helpers.Serializable):
     args: Dict[str, Any] = dataclasses.field(default_factory=dict)
     extra_kwargs_map: Dict[str, str] = dataclasses.field(default_factory=dict)
     """Mapping of field names to use as extra_kwargs for the sample.
-    key is name in extra_kwargs, value is name in dataset row."""
+    key is name in extra_kwargs, value is name in dataset row.
+    Supports dot notation for nested fields (e.g., 'other_attributes.task')."""
+    breakdown_fields: List[str] = dataclasses.field(default_factory=list)
+    """Fields in extra_kwargs to use for score breakdown reporting.
+    For example, ['task_type'] will report separate scores for each task type."""
 
 
 @dataclasses.dataclass
@@ -189,6 +193,10 @@ class DatasetConfig(helpers.Serializable):
     """Direct messages for the dataset. This is a JSON string of a list of messages. This replaces the user_template and assistant_template and system_prompt_template."""
     label_column: Optional[str] = None
     """Label column, used with messages_direct_column when we can't just use the last message as the label."""
+    row_filter: Optional[Dict[str, Any]] = None
+    """Optional filter to select specific rows. Format: {"field.nested_field": "value"}.
+    Uses dot notation for nested fields (e.g., 'other_attributes.task').
+    Multiple conditions are AND-ed together."""
 
     def __post_init__(self):
         """Set defaults only if this is a root config, so that said defaults in a subclass don't act as overrides."""

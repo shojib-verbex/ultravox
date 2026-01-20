@@ -265,6 +265,24 @@ def eval_datasets(
                         )
                     )
 
+                    # Compute and report breakdown scores if configured
+                    if dataset_config.eval_config.breakdown_fields:
+                        for field in dataset_config.eval_config.breakdown_fields:
+                            breakdown = eval_metrics.aggregate_scores_by_field(
+                                results, field
+                            )
+                            for group_key, (score, count) in breakdown.items():
+                                logging.info(
+                                    f"  Breakdown [{field}={group_key}]: {score:.4f} ({count} samples)"
+                                )
+                                metrics.append(
+                                    (
+                                        f"{dataset.name}.{dataset_config.eval_config.metric}.{group_key}",
+                                        f"{aug_name}",
+                                        score,
+                                    )
+                                )
+
                     if wandb.run:
                         wandb.run.log(
                             {
