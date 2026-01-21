@@ -35,8 +35,15 @@ CORPUS_METRIC_REGISTRY: Dict[
 ] = {
     "bleu": string_metrics.bleu,
     "wer": string_metrics.wer,
+    # QA metrics (with article/punctuation removal)
+    "f1_qa": string_metrics.f1_qa,
+    "exact_match_qa": string_metrics.exact_match_qa,
+    # Classification metrics (case-insensitive only)
+    "exact_match": string_metrics.exact_match,
+    # Backward compatibility aliases
     "squad_f1": string_metrics.squad_f1,
     "squad_exact_match": string_metrics.squad_exact_match,
+    "exact_match_normalized": string_metrics.exact_match_normalized,
 }
 
 
@@ -66,14 +73,19 @@ def _compute_per_sample_scores(
             sample.score = string_metrics.bleu_single(
                 sample.generated_answer, sample.expected_answer, args
             )
-    elif metric == "squad_f1":
+    elif metric in ("f1_qa", "squad_f1"):
         for sample in samples:
-            sample.score = string_metrics.squad_f1_single(
+            sample.score = string_metrics.f1_qa_single(
                 sample.generated_answer, sample.expected_answer
             )
-    elif metric == "squad_exact_match":
+    elif metric in ("exact_match_qa", "squad_exact_match"):
         for sample in samples:
-            sample.score = string_metrics.squad_exact_match_single(
+            sample.score = string_metrics.exact_match_qa_single(
+                sample.generated_answer, sample.expected_answer
+            )
+    elif metric in ("exact_match", "exact_match_normalized"):
+        for sample in samples:
+            sample.score = string_metrics.exact_match_single(
                 sample.generated_answer, sample.expected_answer
             )
 
