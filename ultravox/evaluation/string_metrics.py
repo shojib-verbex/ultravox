@@ -262,12 +262,11 @@ def exact_match_single(prediction: str, ground_truth: str) -> float:
 
     Returns 100.0 if exact match after normalization, 0.0 otherwise.
     Used for classification tasks like emotion recognition, sentiment analysis, etc.
+    Strips trailing punctuation to handle responses like "No." matching "no".
     """
-    return (
-        100.0
-        if prediction.strip().lower() == ground_truth.strip().lower()
-        else 0.0
-    )
+    pred = prediction.strip().lower().rstrip(".,!?;:")
+    gt = ground_truth.strip().lower().rstrip(".,!?;:")
+    return 100.0 if pred == gt else 0.0
 
 
 def exact_match(
@@ -278,7 +277,8 @@ def exact_match(
 
     This metric is used for tasks where the model output should exactly match
     one of several predefined labels (e.g., emotion recognition, sentiment analysis,
-    accent classification). Only performs case normalization and whitespace trimming.
+    accent classification). Performs case normalization, whitespace trimming, and
+    strips trailing punctuation (e.g., "No." matches "no").
 
     Returns score as percentage (0-100).
     """
