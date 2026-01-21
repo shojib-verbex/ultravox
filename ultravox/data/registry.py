@@ -10,6 +10,7 @@ from ultravox.data.configs import bigbenchaudio
 from ultravox.data.configs import boolq
 from ultravox.data.configs import commonvoice
 from ultravox.data.configs import covost2
+from ultravox.data.configs import dynamic_superb
 from ultravox.data.configs import fleurs
 from ultravox.data.configs import gigaspeech
 from ultravox.data.configs import heysquad
@@ -114,4 +115,5 @@ register_datasets(shrutilipi.configs)
 register_datasets(kathbath.configs)
 register_datasets(indicvoices.configs)
 register_datasets(mmau.configs)
+register_datasets(dynamic_superb.configs)
 register_datasets(voicebench.configs)

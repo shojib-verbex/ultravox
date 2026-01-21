@@ -1,0 +1,16 @@
+model: "fixie-ai/ultravox-v0_6-llama-3_1-8b"
+
+report_logs_to: ["wandb"]
+output_dir: "./output"
+
+eval_sets:
+  - name: dynamic-superb-emotion
+  - name: dynamic-superb-sentiment
+  - name: dynamic-superb-stuttering
+  - name: dynamic-superb-accent
+  - name: dynamic-superb-asr
+
+eval_dataset_args:
+  max_samples: 1500
+
+eval_batch_size: 4

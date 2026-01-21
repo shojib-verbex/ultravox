@@ -185,10 +185,10 @@ def bleu_single(hypothesis: str, reference: str, args: Dict[str, Any]) -> float:
     return score
 
 
-def _normalize_squad_answer(s: str) -> str:
+def _normalize_qa_answer(s: str) -> str:
     """Lower text and remove punctuation, articles and extra whitespace.
 
-    This is the standard normalization used in SQuAD evaluation.
+    This normalization is used for extractive QA evaluation (SQuAD-style).
     """
 
     def remove_articles(text: str) -> str:
@@ -204,25 +204,27 @@ def _normalize_squad_answer(s: str) -> str:
     return white_space_fix(remove_articles(remove_punc(s.lower())))
 
 
-def squad_exact_match_single(prediction: str, ground_truth: str) -> float:
-    """Compute SQuAD-style exact match for a single sample.
+def exact_match_qa_single(prediction: str, ground_truth: str) -> float:
+    """Compute exact match for extractive QA tasks.
 
+    Normalizes by lowercasing, removing punctuation, articles, and extra whitespace.
     Returns 100.0 if exact match, 0.0 otherwise.
     """
     return (
         100.0
-        if _normalize_squad_answer(prediction) == _normalize_squad_answer(ground_truth)
+        if _normalize_qa_answer(prediction) == _normalize_qa_answer(ground_truth)
         else 0.0
     )
 
 
-def squad_f1_single(prediction: str, ground_truth: str) -> float:
-    """Compute SQuAD-style F1 for a single sample.
+def f1_qa_single(prediction: str, ground_truth: str) -> float:
+    """Compute F1 score for extractive QA tasks.
 
+    Measures token-level overlap after QA normalization.
     Returns score in range [0, 100].
     """
-    pred_tokens = _normalize_squad_answer(prediction).split()
-    gt_tokens = _normalize_squad_answer(ground_truth).split()
+    pred_tokens = _normalize_qa_answer(prediction).split()
+    gt_tokens = _normalize_qa_answer(ground_truth).split()
 
     if len(pred_tokens) == 0 or len(gt_tokens) == 0:
         return 100.0 if pred_tokens == gt_tokens else 0.0
@@ -238,37 +240,79 @@ def squad_f1_single(prediction: str, ground_truth: str) -> float:
     return (2 * precision * recall) / (precision + recall) * 100
 
 
-def squad_exact_match(
+def exact_match_qa(
     samples: List[eval_types.Sample], args: Dict[str, Any]
 ) -> eval_types.MeanResult:
     """
-    Compute SQuAD-style exact match score for extractive question answering.
+    Compute exact match score for extractive question answering.
 
     Exact match measures whether the prediction exactly matches the ground truth
     after normalization (lowercasing, removing punctuation/articles/whitespace).
+    Use this for QA tasks like HeySQuAD, SQuAD, etc.
     """
     scores = [
-        squad_exact_match_single(sample.generated_answer, sample.expected_answer)
+        exact_match_qa_single(sample.generated_answer, sample.expected_answer)
         for sample in samples
     ]
     return eval_types.MeanResult(score=sum(scores) / len(scores))
 
 
-def squad_f1(
+def exact_match_single(prediction: str, ground_truth: str) -> float:
+    """Compute case-insensitive exact match for a single sample.
+
+    Returns 100.0 if exact match after normalization, 0.0 otherwise.
+    Used for classification tasks like emotion recognition, sentiment analysis, etc.
+    """
+    return (
+        100.0
+        if prediction.strip().lower() == ground_truth.strip().lower()
+        else 0.0
+    )
+
+
+def exact_match(
     samples: List[eval_types.Sample], args: Dict[str, Any]
 ) -> eval_types.MeanResult:
     """
-    Compute SQuAD-style F1 score for extractive question answering.
+    Compute case-insensitive exact match score for classification tasks.
 
-    F1 score measures token-level overlap between prediction and ground truth,
-    accounting for both precision and recall. This is the standard metric for
-    SQuAD and similar extractive QA datasets.
+    This metric is used for tasks where the model output should exactly match
+    one of several predefined labels (e.g., emotion recognition, sentiment analysis,
+    accent classification). Only performs case normalization and whitespace trimming.
+
+    Returns score as percentage (0-100).
     """
     scores = [
-        squad_f1_single(sample.generated_answer, sample.expected_answer)
+        exact_match_single(sample.generated_answer, sample.expected_answer)
+        for sample in samples
+    ]
+    return eval_types.MeanResult(score=sum(scores) / len(scores) if scores else 0.0)
+
+
+def f1_qa(
+    samples: List[eval_types.Sample], args: Dict[str, Any]
+) -> eval_types.MeanResult:
+    """
+    Compute F1 score for extractive question answering.
+
+    F1 score measures token-level overlap between prediction and ground truth,
+    accounting for both precision and recall. Use this for QA tasks like
+    HeySQuAD, SQuAD, etc.
+    """
+    scores = [
+        f1_qa_single(sample.generated_answer, sample.expected_answer)
         for sample in samples
     ]
     return eval_types.MeanResult(score=sum(scores) / len(scores))
+
+
+# Backward compatibility aliases
+squad_exact_match_single = exact_match_qa_single
+squad_f1_single = f1_qa_single
+squad_exact_match = exact_match_qa
+squad_f1 = f1_qa
+exact_match_normalized_single = exact_match_single
+exact_match_normalized = exact_match
 
 
 def main():

@@ -31,7 +31,7 @@ HEYSQUAD_BASE_CONFIG = types.DatasetConfig(
     name="heysquad",
     user_template=HEYSQUAD_USER_TEMPLATE,
     transcript_template="{{transcription}}",
-    eval_config=types.EvalConfig(metric="squad_f1"),
+    eval_config=types.EvalConfig(metric="f1_qa"),
 )
 
 # Base config with Exact Match metric
@@ -39,7 +39,7 @@ HEYSQUAD_BASE_EM_CONFIG = types.DatasetConfig(
     name="heysquad-em",
     user_template=HEYSQUAD_USER_TEMPLATE,
     transcript_template="{{transcription}}",
-    eval_config=types.EvalConfig(metric="squad_exact_match"),
+    eval_config=types.EvalConfig(metric="exact_match_qa"),
 )
 
 # Human-spoken version with F1 metric
