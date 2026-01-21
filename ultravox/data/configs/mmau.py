@@ -33,6 +33,9 @@ MMAU_BASE_CONFIG = types.DatasetConfig(
     assistant_template="{{answer[1] if answer.startswith('(') else answer}}",
     eval_config=types.EvalConfig(
         metric="voicebench_mcq",
+        # Stricter scoring: no random guessing when answer can't be extracted
+        # This prevents inflated scores from "I can't hear the audio" responses
+        args={"random_on_parse_fail": False},
         # Map task type from dataset to extra_kwargs for breakdown reporting
         extra_kwargs_map={"task_type": "other_attributes.task"},
         # Report separate scores for each task type (speech, sound, music)

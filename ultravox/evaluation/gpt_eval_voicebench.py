@@ -1001,13 +1001,27 @@ def evaluate_yes_no_voicebench(
     )
 
 
-def evaluate_mcq_voicebench(sample: eval_types.Sample) -> eval_types.InstructResult:
-    """Evaluate multiple choice questions."""
+def evaluate_mcq_voicebench(
+    sample: eval_types.Sample, random_on_parse_fail: bool = True
+) -> eval_types.InstructResult:
+    """Evaluate multiple choice questions.
+
+    Args:
+        sample: The sample to evaluate.
+        random_on_parse_fail: If True (default), randomly guess when no answer can be
+            extracted. If False, score as 0 when no
+            answer is extracted (stricter).
+    """
     ground_truth = sample.expected_answer
     pred = AnswerExtractor.extract_mcq_answer(sample.generated_answer)
 
     if pred is None:
-        pred = random.choice(["A", "B", "C", "D"])
+        if random_on_parse_fail:
+            # Original VoiceBench behavior: random guess on parse failure
+            pred = random.choice(["A", "B", "C", "D"])
+        else:
+            # Stricter behavior: no valid answer = incorrect
+            return eval_types.InstructResult(score=0, reason="no_answer_extracted")
 
     score = int(pred == ground_truth)
     return eval_types.InstructResult(score=score, reason="")
