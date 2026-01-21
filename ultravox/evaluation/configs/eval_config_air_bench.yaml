@@ -1,0 +1,17 @@
+model: "fixie-ai/ultravox-v0_6-llama-3_1-8b"
+
+report_logs_to: ["wandb"]
+output_dir: "./output"
+
+# AIR-Bench Foundation Benchmark
+# 19 tasks across speech, sound, and music domains
+# Total: ~24.7k multiple-choice questions
+
+eval_sets:
+  # Full benchmark (all 19 tasks)
+  - name: air-bench
+
+eval_dataset_args:
+  max_samples: 25000
+
+eval_batch_size: 4

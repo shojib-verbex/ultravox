@@ -542,6 +542,231 @@ class LibriSpeechDummyDataset(GenericDataset):
         )
 
 
+class AIRBenchDataset(VoiceDataset):
+    """
+    AIR-Bench (Audio InstRuction Benchmark) dataset.
+    https://huggingface.co/datasets/qyang1021/AIR-Bench-Dataset
+
+    This dataset requires custom loading because:
+    1. Metadata (questions, answers) is in a separate JSON file
+    2. Audio files are in task-specific subfolders
+    3. The standard HF loader doesn't properly combine them
+
+    The dataset contains 19 foundation tasks across speech, sound, and music domains.
+    """
+
+    # Task name to domain mapping
+    SPEECH_TASKS = {
+        "Speech_Grounding",
+        "Speaker_Gender_Recognition",
+        "Speaker_Age_Prediction",
+        "Speaker_Emotion_Recontion",
+        "Speaker_Intent_Classification",
+        "Speaker_Number_Verification",
+        "Speech_Entity_Reconition",
+        "Spoken_Language_Identification",
+        "Synthesized_Voice_Detection",
+    }
+    SOUND_TASKS = {
+        "Acoustic_Scene_Classification",
+        "Sound_AQA",
+        "Audio_Grounding",
+        "vocal_sound_classification",
+    }
+    MUSIC_TASKS = {
+        "Music_Genre_Recognition",
+        "Music_Instruments_Classfication",
+        "Music_Midi_Pitch_Analysis",
+        "Music_Midi_Velocity_Analysis",
+        "Music_Mood_Recognition",
+        "Music_AQA",
+    }
+
+    def __init__(
+        self,
+        args: types.VoiceDatasetArgs,
+        config: types.DatasetConfig,
+    ) -> None:
+        super().__init__(args)
+        self._config = config
+
+        # Load metadata from HuggingFace
+        from huggingface_hub import hf_hub_download
+
+        meta_file = hf_hub_download(
+            repo_id="qyang1021/AIR-Bench-Dataset",
+            filename="Foundation/Foundation_meta.json",
+            repo_type="dataset",
+        )
+
+        import json
+
+        with open(meta_file, "r") as f:
+            self._metadata = json.load(f)
+
+        # Apply row filter if specified
+        if config.row_filter:
+            self._metadata = self._filter_metadata(self._metadata, config.row_filter)
+
+        # Shuffle if needed
+        if self._args.shuffle:
+            self._rng.shuffle(self._metadata)
+
+        # Determine the answer letter for each sample (A, B, C, or D)
+        for item in self._metadata:
+            item["answer_letter"] = self._get_answer_letter(item)
+
+        dataset_name = f"{config.name}.{self._args.split.value}"
+        num_samples = min(len(self._metadata), config.splits[0].num_samples)
+        self._init_dataset(self._metadata, dataset_name, num_samples)
+
+    def _filter_metadata(
+        self, metadata: List[Dict[str, Any]], row_filter: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
+        """Filter metadata based on row_filter config."""
+        filtered = []
+        for item in metadata:
+            include = True
+            for field, value in row_filter.items():
+                if field == "_domain":
+                    # Special filter for domain grouping
+                    task_name = item.get("task_name", "")
+                    if value == "speech" and task_name not in self.SPEECH_TASKS:
+                        include = False
+                    elif value == "sound" and task_name not in self.SOUND_TASKS:
+                        include = False
+                    elif value == "music" and task_name not in self.MUSIC_TASKS:
+                        include = False
+                elif item.get(field) != value:
+                    include = False
+            if include:
+                filtered.append(item)
+        return filtered
+
+    def _get_answer_letter(self, item: Dict[str, Any]) -> str:
+        """Determine which choice (A/B/C/D) matches the ground truth answer."""
+        answer_gt = item.get("answer_gt", "")
+        if item.get("choice_a") == answer_gt:
+            return "A"
+        elif item.get("choice_b") == answer_gt:
+            return "B"
+        elif item.get("choice_c") == answer_gt:
+            return "C"
+        elif item.get("choice_d") == answer_gt:
+            return "D"
+        # Fallback: return the raw answer
+        return answer_gt
+
+    def __str__(self):
+        return f"AIRBenchDataset({self._config.name})"
+
+    def __iter__(self):
+        from huggingface_hub import hf_hub_download
+        import soundfile as sf
+
+        yielded = 0
+        for item in self._metadata:
+            if yielded >= self._length:
+                break
+
+            try:
+                # Construct audio path: Foundation/{task_name}_{dataset_name}/{filename}
+                task_name = item["task_name"]
+                dataset_name = item["dataset_name"]
+                audio_filename = item["path"]
+                folder_name = f"{task_name}_{dataset_name}"
+
+                # Download audio file
+                audio_path = hf_hub_download(
+                    repo_id="qyang1021/AIR-Bench-Dataset",
+                    filename=f"Foundation/{folder_name}/{audio_filename}",
+                    repo_type="dataset",
+                )
+
+                # Load audio
+                audio_data, sr = sf.read(audio_path)
+
+                # Resample if needed
+                if sr != data_sample.SAMPLE_RATE:
+                    import librosa
+
+                    audio_data = librosa.resample(
+                        audio_data, orig_sr=sr, target_sr=data_sample.SAMPLE_RATE
+                    )
+
+                # Convert to float32 if needed
+                audio_data = audio_data.astype(np.float32)
+
+                # Check audio duration
+                if (
+                    self._args.max_audio_duration_secs > 0
+                    and len(audio_data) / data_sample.SAMPLE_RATE
+                    > self._args.max_audio_duration_secs
+                ):
+                    continue
+
+                # Create the sample
+                sample = self._get_sample(item, audio_data)
+                if sample is not None:
+                    yielded += 1
+                    yield sample
+
+            except Exception as e:
+                logging.warning(f"Error loading AIR-Bench sample: {e}")
+                continue
+
+    def _get_sample(
+        self, item: Dict[str, Any], audio: np.ndarray
+    ) -> Optional[data_sample.VoiceSample]:
+        """Convert a metadata item + audio into a VoiceSample."""
+        try:
+            # Render user template
+            user_content = jinja2.Template(
+                self._config.user_template,
+                undefined=jinja2.StrictUndefined,
+            ).render(**item, text_proc=text_proc)
+
+            # Render assistant template (the answer letter)
+            assistant_content = jinja2.Template(
+                self._config.assistant_template,
+                undefined=jinja2.StrictUndefined,
+            ).render(**item, text_proc=text_proc)
+
+            # Build extra_kwargs for breakdown reporting
+            extra_kwargs = None
+            if (
+                self._config.eval_config is not None
+                and self._config.eval_config.extra_kwargs_map
+            ):
+                extra_kwargs = {
+                    key: item.get(field_path)
+                    for key, field_path in self._config.eval_config.extra_kwargs_map.items()
+                }
+
+            if not self._args.include_audio:
+                user_content = user_content.replace(
+                    types.AUDIO_PLACEHOLDER, '"[audio]"'
+                )
+                return self._make_sample(
+                    self._make_messages(user_content, assistant_content),
+                    extra_kwargs=extra_kwargs,
+                )
+
+            return self._make_sample(
+                self._make_messages(user_content, assistant_content),
+                audio,
+                audio_transcript="",
+                extra_kwargs=extra_kwargs,
+            )
+
+        except jinja2.TemplateError as e:
+            logging.warning(f"Template error for AIR-Bench sample: {e}")
+            return None
+
+    def get_config(self):
+        return self._config
+
+
 class EmptyDataset(SizedIterableDataset):
     def __init__(self, length: int = 1) -> None:
         self._length = length
