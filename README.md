@@ -102,6 +102,61 @@ If you plan to use augmentations (optional), you may also want to install system
 
 We're using Poetry to manage the Python virtual environment. You can observe your environment with `poetry env info`.
 
+## Environment Setup (Docker)
+
+For a containerized setup with GPU support, you can use Docker:
+
+### Prerequisites
+
+- Docker with NVIDIA Container Toolkit installed
+- NVIDIA GPU with CUDA support
+
+### Quick Start
+
+1. **Setup environment variables:**
+
+```bash
+cp .env.example .env
+# Edit .env with your HuggingFace token and other settings
+```
+
+2. **Build the Docker image:**
+
+```bash
+docker-compose build
+```
+
+3. **Run commands:**
+
+```bash
+# Interactive shell
+docker-compose run --rm ultravox bash
+
+# Run evaluation
+docker-compose run --rm ultravox just eval --config ultravox/evaluation/configs/eval_config.yaml
+
+# Run training
+docker-compose run --rm ultravox just train --config_path ultravox/training/configs/example_config.yaml
+
+# Run inference
+docker-compose run --rm ultravox just infer --model fixie-ai/ultravox-v0_6-llama-3_1-8b
+```
+
+### Docker Volumes
+
+The Docker setup mounts the following volumes:
+- `~/.cache/huggingface` → `/cache/huggingface` (HuggingFace model cache)
+- `./output` → `/app/output` (Evaluation/training outputs)
+- `./ultravox/evaluation/configs` → `/app/ultravox/evaluation/configs` (Evaluation configs)
+
+### GPU Selection
+
+To use specific GPUs:
+
+```bash
+CUDA_VISIBLE_DEVICES=0,1 docker-compose run --rm ultravox just eval ...
+```
+
 ## Training
 
 Currently, we keep both the LLM and the audio encoder frozen and only train the adapter/projector. Training Ultraox v0.4 took 2-3 hours on 8xH100 GPUs for 14K training steps.

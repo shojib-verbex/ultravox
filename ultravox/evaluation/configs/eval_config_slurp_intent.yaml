@@ -1,0 +1,16 @@
+model: "fixie-ai/ultravox-v0_6-llama-3_1-8b"
+
+report_logs_to: ["wandb"]
+output_dir: "./output"
+
+# SLURP Intent Classification Only
+# Tests the model's ability to classify spoken utterances into 101 intent classes
+# across 18 domains (alarm, calendar, music, iot, weather, etc.)
+
+eval_sets:
+  - name: slurp-intent
+
+eval_dataset_args:
+  max_samples: 15000
+
+eval_batch_size: 4

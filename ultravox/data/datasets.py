@@ -767,6 +767,98 @@ class AIRBenchDataset(VoiceDataset):
         return self._config
 
 
+class SLURPDataset(GenericDataset):
+    """
+    SLURP (Spoken Language Understanding Resource Package) dataset.
+    https://huggingface.co/datasets/qmeeus/slurp
+
+    SLURP is a benchmark for end-to-end Spoken Language Understanding with:
+    - 101 intent classes across 18 domains
+    - Slot filling annotations in format: [slot_type : value]
+    - ~72k training samples, ~13k test samples
+
+    This class extends GenericDataset to add intent label mapping,
+    since the HuggingFace dataset stores intents as integers (0-100).
+    """
+
+    # All 101 intent labels from SLURP
+    INTENT_LABELS = [
+        "addcontact", "alarm_query", "alarm_remove", "alarm_set",
+        "audio_volume_down", "audio_volume_mute", "audio_volume_other", "audio_volume_up",
+        "calendar_query", "calendar_remove", "calendar_set", "cleaning", "coffee", "convert",
+        "cooking_query", "cooking_recipe", "createoradd", "currency",
+        "datetime_convert", "datetime_query", "definition",
+        "email_addcontact", "email_query", "email_querycontact", "email_sendemail",
+        "events", "factoid", "game",
+        "general_affirm", "general_commandstop", "general_confirm", "general_dontcare",
+        "general_explain", "general_greet", "general_joke", "general_negate",
+        "general_praise", "general_quirky", "general_repeat", "greet",
+        "hue_lightdim", "hue_lightoff", "hue_lightup",
+        "iot_cleaning", "iot_coffee", "iot_hue_lightchange", "iot_hue_lightdim",
+        "iot_hue_lightoff", "iot_hue_lighton", "iot_hue_lightup", "iot_wemo_off", "iot_wemo_on",
+        "joke", "likeness", "lists_createoradd", "lists_query", "lists_remove", "locations",
+        "music", "music_dislikeness", "music_likeness", "music_query", "music_settings",
+        "news_query", "play_audiobook", "play_game", "play_music", "play_podcasts", "play_radio",
+        "podcasts", "post", "qa_currency", "qa_definition", "qa_factoid", "qa_maths", "qa_stock",
+        "query", "querycontact", "quirky", "radio",
+        "recommendation_events", "recommendation_locations", "recommendation_movies",
+        "remove", "sendemail", "set", "settings", "social_post", "social_query",
+        "takeaway_order", "takeaway_query", "ticket", "traffic",
+        "transport_query", "transport_taxi", "transport_ticket", "transport_traffic",
+        "volume_other", "weather_query", "wemo_off", "wemo_on",
+    ]
+
+    # Domain groupings for breakdown reporting
+    DOMAIN_MAP = {
+        "alarm": ["alarm_query", "alarm_remove", "alarm_set"],
+        "audio": ["audio_volume_down", "audio_volume_mute", "audio_volume_other", "audio_volume_up", "volume_other"],
+        "calendar": ["calendar_query", "calendar_remove", "calendar_set"],
+        "cooking": ["cooking_query", "cooking_recipe"],
+        "datetime": ["datetime_convert", "datetime_query"],
+        "email": ["email_addcontact", "email_query", "email_querycontact", "email_sendemail", "sendemail"],
+        "general": ["general_affirm", "general_commandstop", "general_confirm", "general_dontcare",
+                    "general_explain", "general_greet", "general_joke", "general_negate",
+                    "general_praise", "general_quirky", "general_repeat", "greet", "joke", "quirky"],
+        "iot": ["cleaning", "coffee", "hue_lightdim", "hue_lightoff", "hue_lightup",
+                "iot_cleaning", "iot_coffee", "iot_hue_lightchange", "iot_hue_lightdim",
+                "iot_hue_lightoff", "iot_hue_lighton", "iot_hue_lightup", "iot_wemo_off", "iot_wemo_on",
+                "wemo_off", "wemo_on"],
+        "lists": ["createoradd", "lists_createoradd", "lists_query", "lists_remove"],
+        "music": ["music", "music_dislikeness", "music_likeness", "music_query", "music_settings",
+                  "play_audiobook", "play_game", "play_music", "play_podcasts", "play_radio", "podcasts", "radio"],
+        "news": ["news_query"],
+        "qa": ["convert", "currency", "definition", "events", "factoid", "game", "likeness", "locations",
+               "qa_currency", "qa_definition", "qa_factoid", "qa_maths", "qa_stock", "query"],
+        "recommendation": ["recommendation_events", "recommendation_locations", "recommendation_movies"],
+        "social": ["addcontact", "post", "querycontact", "social_post", "social_query"],
+        "takeaway": ["takeaway_order", "takeaway_query"],
+        "transport": ["ticket", "traffic", "transport_query", "transport_taxi", "transport_ticket", "transport_traffic"],
+        "weather": ["weather_query"],
+    }
+
+    def _get_sample(self, row) -> Optional[data_sample.VoiceSample]:
+        # Map intent ID to label name
+        intent_id = row.get("intent")
+        if isinstance(intent_id, int) and 0 <= intent_id < len(self.INTENT_LABELS):
+            row["intent_label"] = self.INTENT_LABELS[intent_id]
+        else:
+            row["intent_label"] = str(intent_id)
+
+        # Add domain for breakdown reporting
+        intent_label = row["intent_label"]
+        row["domain"] = self._get_domain(intent_label)
+
+        # Call parent implementation
+        return super()._get_sample(row)
+
+    def _get_domain(self, intent_label: str) -> str:
+        """Map intent label to domain for breakdown reporting."""
+        for domain, intents in self.DOMAIN_MAP.items():
+            if intent_label in intents:
+                return domain
+        return "other"
+
+
 class EmptyDataset(SizedIterableDataset):
     def __init__(self, length: int = 1) -> None:
         self._length = length
@@ -919,7 +1011,7 @@ class Range(SizedIterableDataset):
         return self._name
 
     def get_config(self):
-        if isinstance(self._dataset, GenericDataset):
+        if hasattr(self._dataset, "get_config"):
             return self._dataset.get_config()
         else:
-            raise ValueError("Cannot get config for non-GenericDataset")
+            raise ValueError(f"Cannot get config for {type(self._dataset).__name__}")

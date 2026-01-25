@@ -315,6 +315,134 @@ exact_match_normalized_single = exact_match_single
 exact_match_normalized = exact_match
 
 
+# ============================================================================
+# SLURP Slot Filling Metrics
+# ============================================================================
+
+
+def _extract_slots(annotation: str) -> set:
+    """Extract slots from SLURP annotation format.
+
+    SLURP uses format: "text [slot_type : value] more text [slot_type2 : value2]"
+    Example: "event reminder [event_name : mona] [date : tuesday]"
+
+    Returns a set of (slot_type, value) tuples.
+    """
+    slot_pattern = re.compile(r"\[([^\]:]+)\s*:\s*([^\]]+)\]")
+    slots = set()
+    for match in slot_pattern.finditer(annotation):
+        slot_type = match.group(1).strip().lower()
+        slot_value = match.group(2).strip().lower()
+        slots.add((slot_type, slot_value))
+    return slots
+
+
+def slot_f1_single(prediction: str, ground_truth: str) -> float:
+    """Compute slot F1 score for a single SLURP sample.
+
+    Extracts slots from both prediction and ground truth annotations,
+    then computes F1 based on exact slot matches.
+
+    Returns score in range [0, 100].
+    """
+    pred_slots = _extract_slots(prediction)
+    gt_slots = _extract_slots(ground_truth)
+
+    # Handle edge cases
+    if len(gt_slots) == 0 and len(pred_slots) == 0:
+        return 100.0  # Both empty = perfect match
+    if len(gt_slots) == 0 or len(pred_slots) == 0:
+        return 0.0  # One empty, one not = no match
+
+    # Compute precision, recall, F1
+    common = pred_slots & gt_slots
+    precision = len(common) / len(pred_slots)
+    recall = len(common) / len(gt_slots)
+
+    if precision + recall == 0:
+        return 0.0
+
+    f1 = 2 * precision * recall / (precision + recall)
+    return f1 * 100
+
+
+def slot_f1(
+    samples: List[eval_types.Sample], args: Dict[str, Any]
+) -> eval_types.MeanResult:
+    """Compute slot F1 score for SLURP slot filling task.
+
+    Measures how well the model extracts entities in [slot_type : value] format.
+    Returns score as percentage (0-100).
+    """
+    scores = [
+        slot_f1_single(sample.generated_answer, sample.expected_answer)
+        for sample in samples
+    ]
+    return eval_types.MeanResult(score=sum(scores) / len(scores) if scores else 0.0)
+
+
+def _extract_intent_from_slu(text: str) -> str:
+    """Extract intent from combined SLU format.
+
+    Expected format: "Intent: <intent_label>\nAnnotation: <annotation>"
+    """
+    match = re.search(r"Intent:\s*(\S+)", text, re.IGNORECASE)
+    if match:
+        return match.group(1).strip().lower()
+    return ""
+
+
+def _extract_annotation_from_slu(text: str) -> str:
+    """Extract annotation from combined SLU format.
+
+    Expected format: "Intent: <intent_label>\nAnnotation: <annotation>"
+    """
+    match = re.search(r"Annotation:\s*(.+)", text, re.IGNORECASE | re.DOTALL)
+    if match:
+        return match.group(1).strip()
+    return text  # Fallback to full text
+
+
+def slu_accuracy_single(prediction: str, ground_truth: str) -> float:
+    """Compute SLU accuracy for a single sample.
+
+    Both intent and slots must be correct for a score of 100.
+    Partial credit: 50 for correct intent, 50 * slot_f1 for slots.
+
+    Returns score in range [0, 100].
+    """
+    pred_intent = _extract_intent_from_slu(prediction)
+    gt_intent = _extract_intent_from_slu(ground_truth)
+
+    pred_annotation = _extract_annotation_from_slu(prediction)
+    gt_annotation = _extract_annotation_from_slu(ground_truth)
+
+    # Intent accuracy (50 points)
+    intent_score = 50.0 if pred_intent == gt_intent else 0.0
+
+    # Slot F1 (50 points)
+    slot_score = slot_f1_single(pred_annotation, gt_annotation) * 0.5
+
+    return intent_score + slot_score
+
+
+def slu_accuracy(
+    samples: List[eval_types.Sample], args: Dict[str, Any]
+) -> eval_types.MeanResult:
+    """Compute combined SLU accuracy for SLURP.
+
+    Evaluates both intent classification and slot filling together.
+    Score is weighted: 50% intent accuracy + 50% slot F1.
+
+    Returns score as percentage (0-100).
+    """
+    scores = [
+        slu_accuracy_single(sample.generated_answer, sample.expected_answer)
+        for sample in samples
+    ]
+    return eval_types.MeanResult(score=sum(scores) / len(scores) if scores else 0.0)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Evaluate JSON files using WER and BLEU."
