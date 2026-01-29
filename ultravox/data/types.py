@@ -197,6 +197,9 @@ class DatasetConfig(helpers.Serializable):
     """Optional filter to select specific rows. Format: {"field.nested_field": "value"}.
     Uses dot notation for nested fields (e.g., 'other_attributes.task').
     Multiple conditions are AND-ed together."""
+    dataset_class: Optional[str] = None
+    """Optional custom dataset class name (e.g., 'AIRBenchDataset').
+    If not set, defaults to 'GenericDataset'."""
 
     def __post_init__(self):
         """Set defaults only if this is a root config, so that said defaults in a subclass don't act as overrides."""

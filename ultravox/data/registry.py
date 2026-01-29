@@ -4,6 +4,7 @@ from typing import Dict, List, Optional
 
 from ultravox.data import datasets
 from ultravox.data import types
+from ultravox.data.configs import air_bench
 from ultravox.data.configs import ami
 from ultravox.data.configs import audiobench
 from ultravox.data.configs import bigbenchaudio
@@ -23,6 +24,7 @@ from ultravox.data.configs import musan
 from ultravox.data.configs import peoplespeech
 from ultravox.data.configs import seamlessalign
 from ultravox.data.configs import shrutilipi
+from ultravox.data.configs import slurp
 from ultravox.data.configs import voicebench
 from ultravox.data.configs import voxpopuli
 from ultravox.data.configs import wenetspeech
@@ -58,7 +60,7 @@ def create_dataset(
     name: str,
     args: types.VoiceDatasetArgs,
     verbose: bool = False,
-) -> datasets.GenericDataset:
+) -> datasets.VoiceDataset:
     if name == "dummy":
         return datasets.LibriSpeechDummyDataset(args)
     assert name in DATASET_MAP, f"Unknown dataset: {name}"
@@ -91,10 +93,15 @@ def create_dataset(
 
     if verbose:
         logging.info(f"Creating dataset {name} with config:\n{merged_config}")
-    dataset = datasets.GenericDataset(args, merged_config)
+
+    # Use custom dataset class if specified, otherwise default to GenericDataset
+    dataset_class_name = merged_config.dataset_class or "GenericDataset"
+    dataset_class = getattr(datasets, dataset_class_name)
+    dataset = dataset_class(args, merged_config)
     return dataset
 
 
+register_datasets(air_bench.configs)
 register_datasets(boolq.configs)
 register_datasets(commonvoice.configs)
 register_datasets(covost2.configs)
@@ -116,4 +123,5 @@ register_datasets(kathbath.configs)
 register_datasets(indicvoices.configs)
 register_datasets(mmau.configs)
 register_datasets(dynamic_superb.configs)
+register_datasets(slurp.configs)
 register_datasets(voicebench.configs)

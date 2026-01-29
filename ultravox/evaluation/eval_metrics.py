@@ -40,6 +40,9 @@ CORPUS_METRIC_REGISTRY: Dict[
     "exact_match_qa": string_metrics.exact_match_qa,
     # Classification metrics (case-insensitive only)
     "exact_match": string_metrics.exact_match,
+    # SLURP SLU metrics
+    "slot_f1": string_metrics.slot_f1,
+    "slu_accuracy": string_metrics.slu_accuracy,
     # Backward compatibility aliases
     "squad_f1": string_metrics.squad_f1,
     "squad_exact_match": string_metrics.squad_exact_match,
@@ -86,6 +89,16 @@ def _compute_per_sample_scores(
     elif metric in ("exact_match", "exact_match_normalized"):
         for sample in samples:
             sample.score = string_metrics.exact_match_single(
+                sample.generated_answer, sample.expected_answer
+            )
+    elif metric == "slot_f1":
+        for sample in samples:
+            sample.score = string_metrics.slot_f1_single(
+                sample.generated_answer, sample.expected_answer
+            )
+    elif metric == "slu_accuracy":
+        for sample in samples:
+            sample.score = string_metrics.slu_accuracy_single(
                 sample.generated_answer, sample.expected_answer
             )
 

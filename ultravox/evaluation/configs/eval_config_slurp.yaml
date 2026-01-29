@@ -1,0 +1,18 @@
+model: "fixie-ai/ultravox-v0_6-llama-3_1-8b"
+
+report_logs_to: ["wandb"]
+output_dir: "./output"
+
+# SLURP (Spoken Language Understanding Resource Package)
+# Evaluates intent classification and slot filling from speech
+
+eval_sets:
+  # Intent classification (101 classes)
+  - name: slurp-intent
+  # Slot filling (entity extraction)
+  - name: slurp-slot
+
+eval_dataset_args:
+  max_samples: 15000
+
+eval_batch_size: 4

@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  ultravox:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        CUDA_VERSION: "12.8.1"
+    image: ultravox:latest
+    container_name: ultravox
+
+    # GPU support
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+    # Environment variables
+    environment:
+      - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-all}
+      - HF_HOME=/cache/huggingface
+      - HF_TOKEN=${HF_TOKEN:-}
+      - WANDB_API_KEY=${WANDB_API_KEY:-}
+      - WANDB_PROJECT=${WANDB_PROJECT:-ultravox}
+
+    # Mount volumes for caching and output
+    volumes:
+      # HuggingFace cache (persistent)
+      - ${HF_CACHE_DIR:-~/.cache/huggingface}:/cache/huggingface
+      # Output directory
+      - ./output:/app/output
+      # Optional: Mount source for development (uncomment for live editing)
+      # - ./ultravox:/app/ultravox
+      # Optional: Mount evaluation configs
+      - ./ultravox/evaluation/configs:/app/ultravox/evaluation/configs
+
+    # Keep container running for interactive use
+    stdin_open: true
+    tty: true
+
+    # Working directory
+    working_dir: /app
+
+  # Service for running evaluation
+  eval:
+    extends:
+      service: ultravox
+    container_name: ultravox-eval
+    command: ["just", "eval", "--config", "${EVAL_CONFIG:-ultravox/evaluation/configs/eval_config_air_bench.yaml}"]
+    profiles:
+      - eval
+
+  # Service for running inference
+  infer:
+    extends:
+      service: ultravox
+    container_name: ultravox-infer
+    command: ["just", "infer"]
+    profiles:
+      - infer
+
+  # Service for running training
+  train:
+    extends:
+      service: ultravox
+    container_name: ultravox-train
+    command: ["just", "train"]
+    profiles:
+      - train
