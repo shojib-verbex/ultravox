@@ -1,0 +1,85 @@
+# Dockerfile for Qwen3-Omni Evaluation Client
+# Lightweight container for running evaluations against vLLM server
+# No GPU required - all inference handled by vLLM server
+#
+# Build:
+#   docker compose --profile eval-qwen3-vllm build eval-qwen3-vllm
+#
+# Run:
+#   docker compose --profile eval-qwen3-vllm up eval-qwen3-vllm
+
+FROM python:3.11-slim
+
+ENV PYTHONUNBUFFERED=1
+ENV HF_HOME=/cache/huggingface
+ENV PIP_NO_CACHE_DIR=1
+
+WORKDIR /app
+
+# Install system dependencies including MeCab for sacrebleu Japanese/Korean support
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    curl \
+    ffmpeg \
+    libsndfile1 \
+    mecab \
+    libmecab-dev \
+    mecab-ipadic-utf8 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install CPU-only PyTorch stack (no GPU needed for eval client)
+RUN pip install --no-cache-dir \
+    torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+
+# Install all required dependencies for Qwen3 evaluation
+RUN pip install --no-cache-dir \
+    # Core data processing
+    numpy \
+    soundfile \
+    librosa \
+    scipy \
+    # Audio decoding for HuggingFace datasets
+    torchcodec \
+    # Dataset handling
+    datasets \
+    mosaicml-streaming \
+    "huggingface_hub[cli,hf_xet]>=0.27.0" \
+    # Text processing
+    nltk \
+    truecase \
+    sentencepiece \
+    jinja2 \
+    # Transformers (for tokenizers)
+    "transformers>=4.57.3" \
+    # Evaluation metrics
+    jiwer \
+    sacrebleu \
+    whisper_normalizer \
+    evaluate \
+    # HTTP/API
+    requests \
+    openai \
+    # Language detection (for ifeval)
+    langdetect \
+    # CLI and logging
+    simple_parsing \
+    wandb \
+    tqdm \
+    # Utilities
+    dataclasses-json \
+    protobuf \
+    # Japanese/Korean tokenization for sacrebleu
+    mecab-python3 \
+    ipadic
+
+# Download NLTK data needed for truecase and text processing
+RUN python -c "import nltk; nltk.download('punkt'); nltk.download('punkt_tab'); nltk.download('averaged_perceptron_tagger'); nltk.download('averaged_perceptron_tagger_eng')"
+
+# Copy the ultravox package
+COPY ultravox/ /app/ultravox/
+
+# Create necessary directories
+RUN mkdir -p /cache/huggingface /app/output
+
+# Default command
+CMD ["python", "-m", "ultravox.evaluation.eval_qwen3", "--help"]

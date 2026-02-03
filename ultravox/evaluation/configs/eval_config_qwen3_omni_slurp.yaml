@@ -1,0 +1,26 @@
+# Qwen3-Omni Model Evaluation Configuration (vLLM Backend)
+# SLURP (Spoken Language Understanding Resource Package)
+# Evaluates intent classification and slot filling from speech
+
+model: "Qwen/Qwen3-Omni-30B-A3B-Instruct"
+
+# vLLM server URL
+vllm_url: "http://localhost:7000"
+
+report_logs_to: []  # Add "wandb" if WANDB_API_KEY is set
+output_dir: "./output/qwen3_omni_slurp"
+
+# SLURP evaluation datasets
+eval_sets:
+  # Intent classification (101 classes across 18 domains)
+  - name: slurp-intent
+  # Slot filling (entity extraction in [slot_type : value] format)
+  - name: slurp-slot
+
+eval_dataset_args:
+  max_samples: 15000
+
+# Evaluation parameters
+eval_batch_size: 4  # Concurrent requests for vLLM continuous batching
+eval_max_tokens: 256
+eval_temperature: 0.0
