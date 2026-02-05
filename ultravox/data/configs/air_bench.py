@@ -19,12 +19,13 @@ from ultravox.data import types
 # Metadata is in Foundation/Foundation_meta.json
 
 # User template: Audio + Question + Multiple choice options (A/B/C/D)
+# Some tasks have only 2 choices, others have 3 or 4, so C and D are conditional
 AIR_BENCH_USER_TEMPLATE = (
     f"{types.AUDIO_PLACEHOLDER}\n\n"
     "{{question}}\n\n"
     "A. {{choice_a}}\n"
     "B. {{choice_b}}\n"
-    "C. {{choice_c}}\n"
+    "{% if choice_c is defined and choice_c %}C. {{choice_c}}\n{% endif %}"
     "{% if choice_d is defined and choice_d %}D. {{choice_d}}\n{% endif %}"
 )
 

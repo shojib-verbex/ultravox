@@ -660,6 +660,9 @@ class AIRBenchDataset(VoiceDataset):
     def __str__(self):
         return f"AIRBenchDataset({self._config.name})"
 
+    # Number of yielded samples to skip without loading audio (for resume)
+    _skip_first: int = 0
+
     def __iter__(self):
         from huggingface_hub import hf_hub_download
         import soundfile as sf
@@ -668,6 +671,11 @@ class AIRBenchDataset(VoiceDataset):
         for item in self._metadata:
             if yielded >= self._length:
                 break
+
+            # Fast skip for resume: skip without loading audio
+            if yielded < self._skip_first:
+                yielded += 1
+                continue
 
             try:
                 # Construct audio path: Foundation/{task_name}_{dataset_name}/{filename}

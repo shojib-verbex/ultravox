@@ -11,13 +11,25 @@ output_dir: "./output/qwen3_omni"
 
 # Evaluation datasets - transcription benchmarks
 eval_sets:
+  - name: covost2-en-ar
+  - name: covost2-en-ca
+  - name: covost2-en-de
+  - name: covost2-en-zh
+  - name: covost2-es-en
+  - name: covost2-ru-en
+  - name: covost2-tr-en
+  - name: covost2-zh-en
   - name: librispeech-clean-transcription
   - name: librispeech-other-transcription
+  - name: commonvoice-en-transcription
+  - name: commonvoice-es-transcription
+  - name: commonvoice-ru-transcription
+  - name: bigbenchaudio
 
 eval_dataset_args:
-  max_samples: 50
+  max_samples: 3000
 
 # Evaluation parameters
-eval_batch_size: 4  # Concurrent requests for vLLM continuous batching
+eval_batch_size: 24  # Concurrent requests for vLLM continuous batching
 eval_max_tokens: 512
 eval_temperature: 0.0

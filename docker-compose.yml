@@ -14,7 +14,7 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              count: all
+              device_ids: ['0']
               capabilities: [gpu]
 
     # Environment variables
@@ -126,9 +126,9 @@ services:
       vllm-server:
         condition: service_healthy
     command: >
-      python -m ultravox.evaluation.eval_qwen3
+      sh -c "python -m ultravox.evaluation.eval_qwen3
       --config_path ${EVAL_CONFIG:-ultravox/evaluation/configs/eval_config_qwen3_omni_vllm.yaml}
-      --vllm_url http://vllm-server:7000
+      --vllm_url http://vllm-server:7000"
     environment:
       - HF_HOME=/cache/huggingface
       - HF_TOKEN=${HF_TOKEN:-}

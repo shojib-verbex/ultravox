@@ -97,6 +97,9 @@ class VoiceSample:
             assert (
                 self.audio.dtype == np.float32
             ), f"Unexpected audio dtype: {self.audio.dtype}"
+            # Convert stereo to mono by averaging channels
+            if self.audio.ndim == 2:
+                self.audio = np.mean(self.audio, axis=1).astype(np.float32)
             assert self.audio.ndim == 1, f"Unexpected audio shape: {self.audio.shape}"
 
     def add_past_messages(self, past_messages: List[Dict[str, str]]):

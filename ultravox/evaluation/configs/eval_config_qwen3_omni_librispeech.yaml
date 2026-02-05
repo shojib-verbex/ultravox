@@ -24,9 +24,9 @@ eval_sets:
   - name: librispeech-other-transcription
 
 eval_dataset_args:
-  max_samples: 500
+  max_samples: 3000
 
 # Evaluation parameters
-eval_batch_size: 4  # Concurrent requests for vLLM continuous batching
+eval_batch_size: 24  # Concurrent requests for vLLM continuous batching
 eval_max_tokens: 512
 eval_temperature: 0.0
