@@ -72,7 +72,6 @@ services:
       args:
         CUDA_VERSION: "12.4.0"
     image: ultravox-vllm:latest
-    container_name: ultravox-vllm-server
     # Shared memory for Ray/vLLM (required for tensor parallelism)
     shm_size: '16gb'
     # GPU configuration - Qwen3-Omni 30B needs 2 GPUs with tensor parallelism
@@ -86,7 +85,7 @@ services:
     environment:
       - HF_HOME=/cache/huggingface
       - HF_TOKEN=${HF_TOKEN:-}
-      - VLLM_GPU_MEMORY_UTILIZATION=${VLLM_GPU_MEMORY_UTILIZATION:-0.85}
+      - VLLM_GPU_MEMORY_UTILIZATION=${VLLM_GPU_MEMORY_UTILIZATION:-0.95}
     # Override command to adjust memory utilization via env var
     # Note: removed --enforce-eager to enable CUDA graphs for better performance
     command: >
@@ -96,7 +95,7 @@ services:
       --dtype bfloat16
       --tensor-parallel-size 1
       --trust-remote-code
-      --gpu-memory-utilization ${VLLM_GPU_MEMORY_UTILIZATION:-0.85}
+      --gpu-memory-utilization ${VLLM_GPU_MEMORY_UTILIZATION:-0.95}
     volumes:
       # HuggingFace cache (persistent) - downloads Qwen3 models here
       - ${HF_CACHE_DIR:-~/.cache/huggingface}:/cache/huggingface
@@ -112,6 +111,8 @@ services:
       timeout: 10s
       start_period: 300s  # 5 minutes for model loading
       retries: 3
+    networks:
+      - ultravox-network
 
   # Service for running Qwen3-Omni evaluation with vLLM backend
   # Lightweight container - no GPU needed, vLLM server handles inference
@@ -143,3 +144,11 @@ services:
       - ./ultravox/evaluation/configs:/app/ultravox/evaluation/configs
       # Mount source code for development (allows live updates)
       - ./ultravox:/app/ultravox
+    networks:
+      - ultravox-network
+
+
+networks:
+  ultravox-network:
+    name: ultravox-network
+    driver: bridge
