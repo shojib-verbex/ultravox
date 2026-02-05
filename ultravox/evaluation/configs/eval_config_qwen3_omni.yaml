@@ -24,10 +24,7 @@ eval_sets:
   - name: commonvoice-en-transcription
   - name: commonvoice-es-transcription
   - name: commonvoice-ru-transcription
-  - name: bigbenchaudio
-
-eval_dataset_args:
-  max_samples: 3000
+  # - name: bigbenchaudio
 
 # Evaluation parameters
 eval_batch_size: 24  # Concurrent requests for vLLM continuous batching

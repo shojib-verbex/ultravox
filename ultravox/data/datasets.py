@@ -197,7 +197,14 @@ class VoiceDataset(SizedIterableDataset):
         dataset_iter = iter(self._dataset)
         for row in dataset_iter:
             actual_length += 1
-            sample = self._get_sample(row)
+            try:
+                sample = self._get_sample(row)
+            except Exception as e:
+                logging.warning(
+                    f"Error processing sample in dataset {self.name}: {e}"
+                )
+                bad_samples += 1
+                continue
             if sample is None:
                 print(f"Sample is None in dataset {self.name} for row {row}")
                 bad_samples += 1
