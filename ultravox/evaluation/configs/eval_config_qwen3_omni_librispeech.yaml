@@ -1,0 +1,32 @@
+# Qwen3-Omni Model Evaluation Configuration (vLLM Backend)
+# Uses vLLM server for fast inference
+#
+# Prerequisites:
+#   1. Start vLLM server:
+#      docker compose --profile vllm-server up -d vllm-server
+#
+#   2. Run evaluation:
+#      python -m ultravox.evaluation.eval_qwen3 --config_path <this_file>
+
+model: "Qwen/Qwen3-Omni-30B-A3B-Instruct"
+
+# vLLM server URL
+# Use "http://vllm-server:7000" when running via docker compose
+# Use "http://localhost:7000" when running locally with external vLLM server
+vllm_url: "http://localhost:7000"
+
+report_logs_to: []  # Add "wandb" if WANDB_API_KEY is set
+output_dir: "./output/qwen3_omni_vllm"
+
+# Evaluation datasets - LibriSpeech transcription
+eval_sets:
+  - name: librispeech-clean-transcription
+  - name: librispeech-other-transcription
+
+eval_dataset_args:
+  max_samples: 3000
+
+# Evaluation parameters
+eval_batch_size: 24  # Concurrent requests for vLLM continuous batching
+eval_max_tokens: 512
+eval_temperature: 0.0

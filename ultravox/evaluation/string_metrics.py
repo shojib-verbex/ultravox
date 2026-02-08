@@ -15,6 +15,17 @@ from ultravox.evaluation import eval_types
 # Arabic diacritic marks
 arabic_diacritics = re.compile(r"[\u064B-\u065F\u0670]")
 
+# Cache for expensive evaluate.load() calls
+_WER_METRIC = None
+
+
+def _get_wer_metric():
+    """Get cached WER metric to avoid repeated loading."""
+    global _WER_METRIC
+    if _WER_METRIC is None:
+        _WER_METRIC = evaluate.load("wer")
+    return _WER_METRIC
+
 
 def remove_diacritics(text):
     return arabic_diacritics.sub("", text)
@@ -68,7 +79,7 @@ def wer_single(
         reference, hypothesis, lang_id, cap_hypothesis_len
     )
 
-    wer_metric = evaluate.load("wer")
+    wer_metric = _get_wer_metric()
     wer_score = wer_metric.compute(predictions=[hyp_norm], references=[ref_norm])
     return wer_score * 100
 
@@ -113,7 +124,7 @@ def wer(samples: List[eval_types.Sample], args: Dict[str, Any]) -> eval_types.We
     hypotheses = [s if s.strip() else "<silence>" for s in hypotheses]
 
     # Compute WER using space-separated words
-    wer_metric = evaluate.load("wer")
+    wer_metric = _get_wer_metric()
     wer_score = wer_metric.compute(predictions=hypotheses, references=references)
     return eval_types.WerResult(score=wer_score * 100)
 

@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   ultravox:
     build:
@@ -16,7 +14,7 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              count: all
+              device_ids: ['0']
               capabilities: [gpu]
 
     # Environment variables
@@ -51,8 +49,6 @@ services:
       service: ultravox
     container_name: ultravox-eval
     command: ["just", "eval", "--config", "${EVAL_CONFIG:-ultravox/evaluation/configs/eval_config_air_bench.yaml}"]
-    profiles:
-      - eval
 
   # Service for running inference
   infer:
@@ -60,8 +56,6 @@ services:
       service: ultravox
     container_name: ultravox-infer
     command: ["just", "infer"]
-    profiles:
-      - infer
 
   # Service for running training
   train:
@@ -69,5 +63,89 @@ services:
       service: ultravox
     container_name: ultravox-train
     command: ["just", "train"]
-    profiles:
-      - train
+
+  # vLLM Server for Qwen3-Omni (fast inference backend)
+  vllm-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.vllm
+      args:
+        CUDA_VERSION: "12.4.0"
+    image: ultravox-vllm:latest
+    # Shared memory for Ray/vLLM (required for tensor parallelism)
+    shm_size: '16gb'
+    # GPU configuration - Qwen3-Omni 30B needs 2 GPUs with tensor parallelism
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['1']
+              capabilities: [gpu]
+    environment:
+      - HF_HOME=/cache/huggingface
+      - HF_TOKEN=${HF_TOKEN:-}
+      - VLLM_GPU_MEMORY_UTILIZATION=${VLLM_GPU_MEMORY_UTILIZATION:-0.95}
+    # Override command to adjust memory utilization via env var
+    # Note: removed --enforce-eager to enable CUDA graphs for better performance
+    command: >
+      python -m vllm.entrypoints.openai.api_server
+      --model Qwen/Qwen3-Omni-30B-A3B-Instruct
+      --port 7000
+      --dtype bfloat16
+      --tensor-parallel-size 1
+      --trust-remote-code
+      --gpu-memory-utilization ${VLLM_GPU_MEMORY_UTILIZATION:-0.95}
+    volumes:
+      # HuggingFace cache (persistent) - downloads Qwen3 models here
+      - ${HF_CACHE_DIR:-~/.cache/huggingface}:/cache/huggingface
+      # Optional: Mount pre-downloaded models
+      - ${QWEN_MODELS_DIR:-./.models}:/models/qwen:ro
+    ports:
+      - "${VLLM_PORT:-7000}:7000"
+    # Override command to use different model or settings
+    # command: ["python", "-m", "vllm.entrypoints.openai.api_server", "--model", "/models/qwen/Qwen3-Omni-30B-A3B-Instruct", "--port", "8000", "--dtype", "bfloat16", "--tensor-parallel-size", "2", "--trust-remote-code"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7000/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 300s  # 5 minutes for model loading
+      retries: 3
+    networks:
+      - ultravox-network
+
+  # Service for running Qwen3-Omni evaluation with vLLM backend
+  # Lightweight container - no GPU needed, vLLM server handles inference
+  eval-qwen3-vllm:
+    build:
+      context: .
+      dockerfile: Dockerfile.qwen3-eval
+    image: qwen3-eval:latest
+    container_name: qwen3-eval-vllm
+    working_dir: /app
+    command: >
+      sh -c "python -m ultravox.evaluation.eval_qwen3
+      --config_path ${EVAL_CONFIG:-ultravox/evaluation/configs/eval_config_qwen3_omni_vllm.yaml}
+      --vllm_url http://vllm-server:7000"
+    environment:
+      - HF_HOME=/cache/huggingface
+      - HF_TOKEN=${HF_TOKEN:-}
+      - WANDB_API_KEY=${WANDB_API_KEY:-}
+      - WANDB_PROJECT=${WANDB_PROJECT:-ultravox}
+    volumes:
+      # HuggingFace cache (for dataset downloads)
+      - ${HF_CACHE_DIR:-~/.cache/huggingface}:/cache/huggingface
+      # Output directory
+      - ./output:/app/output
+      # Evaluation configs (mount for easy updates without rebuild)
+      - ./ultravox/evaluation/configs:/app/ultravox/evaluation/configs
+      # Mount source code for development (allows live updates)
+      - ./ultravox:/app/ultravox
+    networks:
+      - ultravox-network
+
+
+networks:
+  ultravox-network:
+    name: ultravox-network
+    driver: bridge

@@ -349,15 +349,46 @@ class AnswerPatterns:
 class AnswerExtractor:
     """Handles extraction of answers from model responses for different question types."""
 
+    # Regex to find the LAST definitive answer statement in a response.
+    # Matches patterns like:
+    #   "the correct answer is: **(B)"
+    #   "the answer is B."
+    #   "correct answer is:\n\n**(C) some text"
+    _ANSWER_DECLARATION_RE = re.compile(
+        r"(?:the\s+)?(?:correct|final)\s+answer\s+is"  # "correct answer is" / "final answer is"
+        r"[:\s\n*]*"                                     # separator: colons, spaces, newlines, asterisks
+        r"\(?([a-d])\)?",                                # the choice letter, optionally in parens
+        re.IGNORECASE,
+    )
+
     @staticmethod
     def extract_mcq_answer(response: str) -> Optional[str]:
-        """Extract multiple choice answer from response."""
-        response = response.lower()
+        """Extract multiple choice answer from response.
+
+        For long responses that discuss all options, we first search for
+        explicit answer declarations (e.g., 'the correct answer is (B)'),
+        taking the LAST match to get the conclusion rather than option
+        discussions. Falls back to template-based pattern matching.
+        """
+        response_lower = response.lower()
 
         # Remove common prefixes
-        if response.startswith(("<1>", "<2>", "<3>")):
-            response = response[3:].strip()
+        if response_lower.startswith(("<1>", "<2>", "<3>")):
+            response_lower = response_lower[3:].strip()
 
+        # First: look for explicit answer declarations and take the LAST one
+        # This handles long responses where the model discusses all options
+        # but states its final answer at the end
+        matches = list(AnswerExtractor._ANSWER_DECLARATION_RE.finditer(response_lower))
+        if matches:
+            return matches[-1].group(1).upper()
+
+        # Fall back to template-based pattern matching
+        return AnswerExtractor._match_mcq_patterns(response_lower)
+
+    @staticmethod
+    def _match_mcq_patterns(response: str) -> Optional[str]:
+        """Match MCQ patterns against a response string."""
         # Check templates
         for template in AnswerPatterns.MCQ_TEMPLATES:
             for choice in ["a", "b", "c", "d"]:

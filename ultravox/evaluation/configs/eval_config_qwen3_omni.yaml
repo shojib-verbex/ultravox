@@ -1,0 +1,32 @@
+# Qwen3-Omni Model Evaluation Configuration (vLLM Backend)
+# Basic transcription benchmarks
+
+model: "Qwen/Qwen3-Omni-30B-A3B-Instruct"
+
+# vLLM server URL
+vllm_url: "http://localhost:7000"
+
+report_logs_to: []  # Add "wandb" if WANDB_API_KEY is set
+output_dir: "./output/qwen3_omni"
+
+# Evaluation datasets - transcription benchmarks
+eval_sets:
+  - name: covost2-en-ar
+  - name: covost2-en-ca
+  - name: covost2-en-de
+  - name: covost2-en-zh
+  - name: covost2-es-en
+  - name: covost2-ru-en
+  - name: covost2-tr-en
+  - name: covost2-zh-en
+  - name: librispeech-clean-transcription
+  - name: librispeech-other-transcription
+  - name: commonvoice-en-transcription
+  - name: commonvoice-es-transcription
+  - name: commonvoice-ru-transcription
+  # - name: bigbenchaudio
+
+# Evaluation parameters
+eval_batch_size: 24  # Concurrent requests for vLLM continuous batching
+eval_max_tokens: 512
+eval_temperature: 0.0

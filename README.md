@@ -228,6 +228,82 @@ just eval --config_path ultravox/evaluation/configs/eval_config.yaml
 
 where `eval_config.yaml` is a config file that specifies the model, datasets, and configurations to use for inference or evaluation. If your dataset is not already defined in ultravox, you need to create a config file for your dataset in `ultravox/data/configs/` (with the appropriate `eval_config` field to specify evaluation metrics and arguments), and register it in `ultravox/data/registry.py`. Please refer to examples in `ultravox/data/configs/`.
 
+### Evaluating Qwen3-Omni Models
+
+This repository supports evaluating Qwen3-Omni multimodal models using a vLLM backend for fast inference.
+
+#### Quick Start with Docker Compose
+
+```bash
+# 1. Build the images
+docker compose build vllm-server eval-qwen3-vllm
+
+# 2. Start the vLLM server (runs in background)
+docker compose up -d vllm-server
+
+# 3. Wait for vLLM server to be healthy, then run evaluation
+docker compose up eval-qwen3-vllm
+
+# Or start both together (eval waits for vllm-server to be healthy)
+docker compose up -d vllm-server eval-qwen3-vllm
+```
+
+#### Running with Different Configs
+
+```bash
+# AIR-Bench evaluation
+EVAL_CONFIG=ultravox/evaluation/configs/eval_config_qwen3_omni_air_bench.yaml \
+docker compose up eval-qwen3-vllm
+
+# SLURP evaluation
+EVAL_CONFIG=ultravox/evaluation/configs/eval_config_qwen3_omni_slurp.yaml \
+docker compose up eval-qwen3-vllm
+
+# LibriSpeech transcription
+EVAL_CONFIG=ultravox/evaluation/configs/eval_config_qwen3_omni.yaml \
+docker compose up eval-qwen3-vllm
+```
+
+#### Running Directly with Python
+
+```bash
+# Start vLLM server first
+docker compose up -d vllm-server
+
+# Run evaluation directly
+python -m ultravox.evaluation.eval_qwen3 \
+    --config_path ultravox/evaluation/configs/eval_config_qwen3_omni.yaml \
+    --vllm_url http://localhost:7000
+```
+
+#### Available Qwen3-Omni Evaluation Configs
+
+| Config File | Description |
+|-------------|-------------|
+| `eval_config_qwen3_omni.yaml` | LibriSpeech transcription (basic ASR) |
+| `eval_config_qwen3_omni_air_bench.yaml` | AIR-Bench (24.7k samples, speech/sound/music) |
+| `eval_config_qwen3_omni_slurp.yaml` | SLURP (intent classification, slot filling) |
+
+#### GPU Configuration
+
+The Qwen3-Omni 30B model is configured for a single GPU by default. To use different GPUs or multiple GPUs, modify `docker-compose.yml`:
+
+```yaml
+# In docker-compose.yml, vllm-server service
+device_ids: ['0']  # Change to your GPU ID(s)
+# For multi-GPU: device_ids: ['0', '1'] and set --tensor-parallel-size 2
+```
+
+#### Monitoring
+
+```bash
+# Follow evaluation logs in real-time
+docker logs -f qwen3-eval-vllm
+
+# Check vLLM server status
+docker logs ultravox-vllm-server
+```
+
 ## Misc
 
 The [Justfile](Justfile) is a good resource for finding popular commands. Here are a few:

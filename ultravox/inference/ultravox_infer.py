@@ -11,6 +11,66 @@ from ultravox.training import ddp_utils
 from ultravox.training.helpers import prefetch_weights
 from ultravox.utils import device_helpers
 
+# Known non-Ultravox model types that users might accidentally use
+QWEN3_OMNI_MODEL_TYPES = {"qwen3_omni_moe", "qwen3_omni"}
+
+
+class ModelTypeMismatchError(Exception):
+    """Raised when the model type doesn't match the expected inference class."""
+
+    pass
+
+
+def validate_ultravox_model(model_path: str) -> str:
+    """
+    Validate that the model at the given path is an Ultravox model.
+
+    Args:
+        model_path: HuggingFace model ID or local path
+
+    Returns:
+        The model_type string from the config
+
+    Raises:
+        ModelTypeMismatchError: If the model is not an Ultravox model
+    """
+    try:
+        config = transformers.AutoConfig.from_pretrained(
+            model_path, trust_remote_code=True
+        )
+        model_type = getattr(config, "model_type", None)
+
+        if model_type is None:
+            # If model_type is not set, let it proceed and fail later if needed
+            logging.warning(
+                f"Could not determine model type for '{model_path}'. Proceeding anyway."
+            )
+            return "unknown"
+
+        if model_type in QWEN3_OMNI_MODEL_TYPES:
+            error_msg = (
+                f"\n{'='*70}\n"
+                f"MODEL TYPE MISMATCH ERROR\n"
+                f"{'='*70}\n\n"
+                f"You are trying to use eval.py (Ultravox) with model: '{model_path}'\n"
+                f"But this model has type: '{model_type}' (Qwen3-Omni)\n\n"
+                f"SOLUTION: For Qwen3-Omni models, use eval_qwen3.py instead:\n"
+                f"  python -m ultravox.evaluation.eval_qwen3 --config_path <your_config>\n\n"
+                f"Or update your config file to use an Ultravox model:\n"
+                f"  model: \"fixie-ai/ultravox-v0_6-llama-3_1-8b\"\n"
+                f"{'='*70}\n"
+            )
+            raise ModelTypeMismatchError(error_msg)
+
+        return model_type
+
+    except ModelTypeMismatchError:
+        raise
+    except Exception as e:
+        # Don't fail on config loading errors - let the actual model loading handle it
+        logging.warning(f"Could not validate model type for '{model_path}': {e}")
+        return "unknown"
+
 
 class UltravoxInference(infer.LocalInference):
     def __init__(
@@ -44,6 +104,11 @@ class UltravoxInference(infer.LocalInference):
             thinking_regex: regex pattern for extracting thinking content from responses
         """
         assert not use_tp or not use_fsdp, "tp and fsdp cannot be used together"
+
+        # Validate model type before loading
+        logging.info(f"Validating model type for {model_path}")
+        model_type = validate_ultravox_model(model_path)
+        logging.info(f"Model type validated: {model_type}")
 
         device = device or device_helpers.default_device()
         dtype = device_helpers.get_dtype(data_type)

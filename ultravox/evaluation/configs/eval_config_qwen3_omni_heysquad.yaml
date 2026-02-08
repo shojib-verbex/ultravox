@@ -1,0 +1,27 @@
+# Qwen3-Omni Model Evaluation Configuration (vLLM Backend)
+# Basic transcription benchmarks
+
+model: "Qwen/Qwen3-Omni-30B-A3B-Instruct"
+
+# vLLM server URL
+vllm_url: "http://localhost:7000"
+
+report_logs_to: []  # Add "wandb" if WANDB_API_KEY is set
+output_dir: "./output/qwen3_omni_heysquad"
+
+# Evaluation datasets
+eval_sets:
+  # F1 Score metrics
+  - name: heysquad-human
+  - name: heysquad-machine
+  # Exact Match metrics
+  - name: heysquad-human-em
+  - name: heysquad-machine-em
+
+eval_dataset_args:
+  max_samples: 5000
+
+# Evaluation parameters
+eval_batch_size: 24  # Concurrent requests for vLLM continuous batching
+eval_max_tokens: 512
+eval_temperature: 0.0

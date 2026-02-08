@@ -1,0 +1,27 @@
+# Qwen3-Omni Model Evaluation Configuration (vLLM Backend)
+# AIR-Bench (Audio Instruction Recognition Benchmark)
+# 19 foundation tasks across speech/sound/music domains
+
+model: "Qwen/Qwen3-Omni-30B-A3B-Instruct"
+
+# vLLM server URL
+vllm_url: "http://localhost:7000"
+
+report_logs_to: []  # Add "wandb" if WANDB_API_KEY is set
+output_dir: "./output/qwen3_omni_air_bench"
+
+# AIR-Bench evaluation datasets
+eval_sets:
+  # Full benchmark: 24.7k samples across 19 tasks
+  # Speech (9k): Gender, Age, Emotion, Intent, Entity, Language ID, etc.
+  # Sound (5.9k): Acoustic Scene, QA, Audio Grounding, Vocal Sound
+  # Music (8.8k): Genre, Instruments, Mood, MIDI Analysis, Music QA
+  - name: air-bench
+
+eval_dataset_args:
+  max_samples: 25000
+
+# Evaluation parameters
+eval_batch_size: 48  # Concurrent requests for vLLM continuous batching
+eval_max_tokens: 256  # Qwen3-Omni generates verbose reasoning
+eval_temperature: 0.0
