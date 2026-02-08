@@ -627,6 +627,38 @@ class AIRBenchDataset(VoiceDataset):
         num_samples = min(len(self._metadata), config.splits[0].num_samples)
         self._init_dataset(self._metadata, dataset_name, num_samples)
 
+        # Pre-download all audio files and get local snapshot directory
+        self._snapshot_dir = self._download_audio_snapshot()
+
+    def _download_audio_snapshot(self) -> str:
+        """Download all needed audio files via snapshot_download.
+
+        Returns the local snapshot directory path so __iter__ can read
+        files directly from disk without any network calls.
+        """
+        from huggingface_hub import snapshot_download
+
+        unique_folders = set()
+        for item in self._metadata:
+            folder_name = f"{item['task_name']}_{item['dataset_name']}"
+            unique_folders.add(folder_name)
+
+        allow_patterns = [f"Foundation/{folder}/*" for folder in sorted(unique_folders)]
+
+        logging.info(
+            f"AIR-Bench: Downloading audio for {len(unique_folders)} "
+            f"task folders ({len(self._metadata)} samples)..."
+        )
+
+        snapshot_dir = snapshot_download(
+            repo_id="qyang1021/AIR-Bench-Dataset",
+            repo_type="dataset",
+            allow_patterns=allow_patterns,
+        )
+
+        logging.info(f"AIR-Bench: Audio download complete. Local dir: {snapshot_dir}")
+        return snapshot_dir
+
     def _filter_metadata(
         self, metadata: List[Dict[str, Any]], row_filter: Dict[str, Any]
     ) -> List[Dict[str, Any]]:
@@ -670,65 +702,88 @@ class AIRBenchDataset(VoiceDataset):
     # Number of yielded samples to skip without loading audio (for resume)
     _skip_first: int = 0
 
-    def __iter__(self):
-        from huggingface_hub import hf_hub_download
+    def _load_audio(self, item: Dict[str, Any]) -> Optional[np.ndarray]:
+        """Load and resample a single audio file. Thread-safe."""
+        import os
+        from math import gcd
+
         import soundfile as sf
+        from scipy.signal import resample_poly
 
+        task_name = item["task_name"]
+        dataset_name = item["dataset_name"]
+        audio_filename = item["path"]
+        folder_name = f"{task_name}_{dataset_name}"
+
+        audio_path = os.path.join(
+            self._snapshot_dir, "Foundation", folder_name, audio_filename
+        )
+
+        audio_data, sr = sf.read(audio_path)
+
+        # scipy resample_poly is ~10x faster than librosa's default kaiser_best
+        if sr != data_sample.SAMPLE_RATE:
+            g = gcd(int(sr), data_sample.SAMPLE_RATE)
+            up = data_sample.SAMPLE_RATE // g
+            down = int(sr) // g
+            audio_data = resample_poly(audio_data, up, down)
+
+        audio_data = audio_data.astype(np.float32)
+
+        if (
+            self._args.max_audio_duration_secs > 0
+            and len(audio_data) / data_sample.SAMPLE_RATE
+            > self._args.max_audio_duration_secs
+        ):
+            return None
+
+        return audio_data
+
+    def __iter__(self):
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        num_workers = 8
         yielded = 0
-        for item in self._metadata:
-            if yielded >= self._length:
-                break
 
-            # Fast skip for resume: skip without loading audio
+        # Collect items to process (applying skip logic)
+        items_to_process = []
+        for item in self._metadata:
+            if len(items_to_process) + yielded >= self._length:
+                break
             if yielded < self._skip_first:
                 yielded += 1
                 continue
+            items_to_process.append(item)
 
-            try:
-                # Construct audio path: Foundation/{task_name}_{dataset_name}/{filename}
-                task_name = item["task_name"]
-                dataset_name = item["dataset_name"]
-                audio_filename = item["path"]
-                folder_name = f"{task_name}_{dataset_name}"
+        # Process in chunks with parallel audio loading
+        chunk_size = num_workers * 4
+        with ThreadPoolExecutor(max_workers=num_workers) as executor:
+            for chunk_start in range(0, len(items_to_process), chunk_size):
+                chunk = items_to_process[chunk_start : chunk_start + chunk_size]
 
-                # Download audio file
-                audio_path = hf_hub_download(
-                    repo_id="qyang1021/AIR-Bench-Dataset",
-                    filename=f"Foundation/{folder_name}/{audio_filename}",
-                    repo_type="dataset",
-                )
+                # Load all audio in this chunk in parallel
+                future_to_idx = {
+                    executor.submit(self._load_audio, item): i
+                    for i, item in enumerate(chunk)
+                }
+                audio_results = [None] * len(chunk)
+                for future in as_completed(future_to_idx):
+                    idx = future_to_idx[future]
+                    try:
+                        audio_results[idx] = future.result()
+                    except Exception as e:
+                        logging.warning(f"Error loading AIR-Bench sample: {e}")
 
-                # Load audio
-                audio_data, sr = sf.read(audio_path)
-
-                # Resample if needed
-                if sr != data_sample.SAMPLE_RATE:
-                    import librosa
-
-                    audio_data = librosa.resample(
-                        audio_data, orig_sr=sr, target_sr=data_sample.SAMPLE_RATE
-                    )
-
-                # Convert to float32 if needed
-                audio_data = audio_data.astype(np.float32)
-
-                # Check audio duration
-                if (
-                    self._args.max_audio_duration_secs > 0
-                    and len(audio_data) / data_sample.SAMPLE_RATE
-                    > self._args.max_audio_duration_secs
-                ):
-                    continue
-
-                # Create the sample
-                sample = self._get_sample(item, audio_data)
-                if sample is not None:
-                    yielded += 1
-                    yield sample
-
-            except Exception as e:
-                logging.warning(f"Error loading AIR-Bench sample: {e}")
-                continue
+                # Yield in original order
+                for item, audio_data in zip(chunk, audio_results):
+                    if audio_data is None:
+                        continue
+                    if yielded >= self._length:
+                        break
+                    sample = self._get_sample(item, audio_data)
+                    if sample is not None:
+                        yielded += 1
+                        yield sample
 
     def _get_sample(
         self, item: Dict[str, Any], audio: np.ndarray

@@ -123,9 +123,6 @@ services:
     image: qwen3-eval:latest
     container_name: qwen3-eval-vllm
     working_dir: /app
-    depends_on:
-      vllm-server:
-        condition: service_healthy
     command: >
       sh -c "python -m ultravox.evaluation.eval_qwen3
       --config_path ${EVAL_CONFIG:-ultravox/evaluation/configs/eval_config_qwen3_omni_vllm.yaml}

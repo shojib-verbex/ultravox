@@ -83,7 +83,7 @@ def infer_dataset(
     max_tokens: Optional[int] = None,
     temperature: float = 0.0,
     output_file: Optional[str] = None,
-    num_prefetch_batches: int = 2,
+    num_prefetch_batches: int = 64,
 ) -> List[eval_types.Sample]:
     """
     Run inference on a dataset with incremental result saving and prefetching.
@@ -142,9 +142,14 @@ def infer_dataset(
 
     def batch_loader():
         """Background thread that loads and prepares batches."""
+        import time
+
         try:
             batch = []
+            t_sample_start = time.monotonic()
+            samples_loaded = 0
             for idx, sample in enumerate(dataset):
+                samples_loaded += 1
                 # Pop the expected answer (assistant message)
                 assistant_message = sample.messages.pop()
                 if assistant_message["role"] != "assistant":
@@ -155,14 +160,28 @@ def infer_dataset(
                 batch.append((idx, sample, reference))
 
                 if len(batch) >= batch_size:
+                    t_load = time.monotonic() - t_sample_start
+                    logging.info(
+                        f"batch_loader: batch ready ({len(batch)} samples loaded in {t_load:.1f}s, "
+                        f"queue_size={prefetch_queue.qsize()}/{num_prefetch_batches})"
+                    )
                     # Put batch in queue (blocks if queue is full)
+                    t_put_start = time.monotonic()
                     prefetch_queue.put(batch)
+                    t_put = time.monotonic() - t_put_start
+                    if t_put > 0.5:
+                        logging.info(
+                            f"batch_loader: queue was full, waited {t_put:.1f}s to enqueue"
+                        )
                     batch = []
+                    t_sample_start = time.monotonic()
 
             # Put remaining samples
             if batch:
                 prefetch_queue.put(batch)
+            logging.info(f"batch_loader: finished loading {samples_loaded} total samples")
         except Exception as e:
+            logging.error(f"batch_loader: error: {e}")
             loading_error.append(e)
         finally:
             loading_done.set()
@@ -187,6 +206,12 @@ def infer_dataset(
                 continue
 
             # Process batch
+            import time
+
+            t_wait = time.monotonic()
+            logging.info(
+                f"main: got batch of {len(batch)}, queue_size={prefetch_queue.qsize()}"
+            )
             batch_samples = [s for _, s, _ in batch]
             outputs = inference.infer_batch(batch_samples, max_tokens, temperature)
 

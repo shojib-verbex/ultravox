@@ -217,8 +217,12 @@ class Qwen3OmniVLLMInference(base.VoiceInference):
         Returns:
             VoiceOutput with generated text and token counts
         """
+        import time
+
         # Convert to vLLM message format
+        t0 = time.monotonic()
         messages = self._convert_to_vllm_messages(sample)
+        t_convert = time.monotonic() - t0
 
         # Build request payload
         payload = {
@@ -229,6 +233,7 @@ class Qwen3OmniVLLMInference(base.VoiceInference):
         }
 
         # Make request to vLLM server
+        t1 = time.monotonic()
         try:
             response = requests.post(
                 self.api_url,
@@ -239,6 +244,7 @@ class Qwen3OmniVLLMInference(base.VoiceInference):
         except requests.exceptions.RequestException as e:
             logging.error(f"vLLM request failed: {e}")
             raise
+        t_request = time.monotonic() - t1
 
         # Parse response
         result = response.json()
@@ -249,6 +255,11 @@ class Qwen3OmniVLLMInference(base.VoiceInference):
         usage = result.get("usage", {})
         input_tokens = usage.get("prompt_tokens", 0)
         output_tokens = usage.get("completion_tokens", 0)
+
+        logging.info(
+            f"infer: convert={t_convert:.3f}s, request={t_request:.3f}s, "
+            f"in_tokens={input_tokens}, out_tokens={output_tokens}"
+        )
 
         return base.VoiceOutput(
             text=output_text.strip(),
@@ -261,7 +272,7 @@ class Qwen3OmniVLLMInference(base.VoiceInference):
         samples: List[datasets.VoiceSample],
         max_tokens: Optional[int] = None,
         temperature: Optional[float] = None,
-        max_concurrent: int = 4,
+        max_concurrent: Optional[int] = None,
     ) -> List[base.VoiceOutput]:
         """
         Batch inference - processes samples concurrently for better GPU utilization.
@@ -273,18 +284,26 @@ class Qwen3OmniVLLMInference(base.VoiceInference):
             samples: List of VoiceSample objects
             max_tokens: Maximum tokens to generate per sample
             temperature: Sampling temperature
-            max_concurrent: Maximum concurrent requests (default: 4)
+            max_concurrent: Maximum concurrent requests (default: all samples)
 
         Returns:
             List of VoiceOutput objects in the same order as input samples
         """
+        import time
+
         if len(samples) <= 1:
             return [self.infer(sample, max_tokens, temperature) for sample in samples]
 
-        # Use concurrent requests for better GPU utilization
+        # Send all requests concurrently - vLLM's continuous batching handles scheduling
+        num_workers = max_concurrent or len(samples)
         results = [None] * len(samples)
 
-        with ThreadPoolExecutor(max_workers=max_concurrent) as executor:
+        t_batch_start = time.monotonic()
+        logging.info(
+            f"infer_batch: starting {len(samples)} samples with {num_workers} workers"
+        )
+
+        with ThreadPoolExecutor(max_workers=num_workers) as executor:
             # Submit all tasks with their indices
             future_to_idx = {
                 executor.submit(self.infer, sample, max_tokens, temperature): idx
@@ -292,13 +311,21 @@ class Qwen3OmniVLLMInference(base.VoiceInference):
             }
 
             # Collect results as they complete
+            completed = 0
             for future in as_completed(future_to_idx):
                 idx = future_to_idx[future]
+                completed += 1
                 try:
                     results[idx] = future.result()
                 except Exception as e:
                     logging.error(f"Inference failed for sample {idx}: {e}")
                     # Return empty output on failure
                     results[idx] = base.VoiceOutput(text="", input_tokens=0, output_tokens=0)
+
+        t_batch_total = time.monotonic() - t_batch_start
+        logging.info(
+            f"infer_batch: {len(samples)} samples done in {t_batch_total:.1f}s "
+            f"({t_batch_total/len(samples):.2f}s/sample)"
+        )
 
         return results
